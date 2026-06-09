@@ -1,6 +1,6 @@
 --[[
  ============================================
- F3X BUILD LOADER (FULLY WORKING + TELEPORT)
+ F3X BUILD LOADER (UNLIMITED SLIDERS + SCROLLING)
  Loads builds from GitHub or local files
  Auto-builds using F3X Building Tools
  Place in StarterPlayerScripts as LocalScript
@@ -31,6 +31,7 @@ local CONFIG = {
 	GitHubBranch = "main",
 	LocalFolder = "BuildExports",
 	BuildSpeed = 0.005,
+	BatchSize = 10,
 	BtoolsTimeout = 12,
 	Debug = true,
 }
@@ -42,7 +43,7 @@ local function dprint(...)
 	end
 end
 
--- ==================== F3X API (Direct ServerEndpoint) ====================
+-- ==================== F3X API ====================
 local F3X = {}
 F3X._tool = nil
 F3X._syncAPI = nil
@@ -52,37 +53,30 @@ function F3X:Init()
 	if self._serverEndpoint and self._serverEndpoint:FindFirstAncestorOfClass("DataModel") then
 		return true
 	end
-
 	local backpack = player:WaitForChild("Backpack")
 	local char = player.Character or player.CharacterAdded:Wait()
-
 	local tool = backpack:FindFirstChild("Building Tools")
 	if not tool then tool = backpack:FindFirstChild("F3X") end
 	if not tool then
 		for _, item in ipairs(backpack:GetChildren()) do
 			if item:IsA("Tool") and (item.Name:find("Building") or item.Name:find("F3X") or item:FindFirstChild("SyncAPI")) then
-				tool = item
-				break
+				tool = item; break
 			end
 		end
 	end
 	if not tool then
 		for _, item in ipairs(char:GetChildren()) do
 			if item:IsA("Tool") and (item.Name:find("Building") or item.Name:find("F3X") or item:FindFirstChild("SyncAPI")) then
-				tool = item
-				break
+				tool = item; break
 			end
 		end
 	end
-
 	if not tool then return false end
-
 	self._tool = tool
 	self._syncAPI = tool:WaitForChild("SyncAPI", 5)
 	if not self._syncAPI then return false end
 	self._serverEndpoint = self._syncAPI:WaitForChild("ServerEndpoint", 5)
 	if not self._serverEndpoint then return false end
-
 	dprint("F3X initialized! Tool:", tool.Name)
 	return true
 end
@@ -100,7 +94,6 @@ function F3X:Invoke(...)
 	return result
 end
 
--- CRITICAL: Always pass workspace as parent. F3X server ONLY accepts workspace as valid parent for CreatePart.
 function F3X:CreatePart(partType, cframe)
 	if partType == "VehicleSeat" then partType = "Vehicle Seat" end
 	return self:Invoke("CreatePart", partType or "Normal", cframe or CFrame.new(0, 10, 0), workspace)
@@ -114,7 +107,6 @@ function F3X:SyncSurface(changes) return self:Invoke("SyncSurface", changes) end
 function F3X:SyncAnchor(changes) return self:Invoke("SyncAnchor", changes) end
 function F3X:SyncCollision(changes) return self:Invoke("SyncCollision", changes) end
 function F3X:SyncRotate(changes) return self:Invoke("SyncRotate", changes) end
-
 function F3X:CreateMeshes(parts)
 	local c = {}
 	for _, p in ipairs(parts) do table.insert(c, {Part = p}) end
@@ -132,7 +124,6 @@ function F3X:RemoveWelds(welds) return self:Invoke("RemoveWelds", welds) end
 function F3X:Remove(objects) return self:Invoke("Remove", objects) end
 function F3X:Clone(items, parent) return self:Invoke("Clone", items, parent) end
 function F3X:Ungroup(groups) return self:Invoke("Ungroup", groups) end
-
 function F3X:SetParent(items, parent)
 	if typeof(items) ~= "table" then items = {items} end
 	return self:Invoke("SetParent", items, parent)
@@ -149,52 +140,37 @@ function F3X:SetLocked(items, locked)
 	return self:Invoke("SetLocked", items, locked)
 end
 
--- ==================== CFRAME PARSER (Robust) ====================
+-- ==================== CFRAME PARSER ====================
 local function parseCFrame(data)
-	if not data then
-		return CFrame.new(0, 10, 0)
-	end
-	if typeof(data) == "CFrame" then
-		return data
-	end
+	if not data then return CFrame.new(0, 10, 0) end
+	if typeof(data) == "CFrame" then return data end
 	if typeof(data) == "table" then
-		if #data >= 12 then
-			return CFrame.new(unpack(data))
-		elseif #data >= 3 then
-			return CFrame.new(data[1], data[2], data[3])
-		else
-			return CFrame.new(0, 10, 0)
-		end
+		if #data >= 12 then return CFrame.new(unpack(data))
+		elseif #data >= 3 then return CFrame.new(data[1], data[2], data[3])
+		else return CFrame.new(0, 10, 0) end
 	end
 	if typeof(data) == "string" then
 		local x, y, z = data:match("CFrame%.new%(([%d%-%.]+),%s*([%d%-%.]+),%s*([%d%-%.]+)%)")
-		if x and y and z then
-			return CFrame.new(tonumber(x), tonumber(y), tonumber(z))
-		end
+		if x and y and z then return CFrame.new(tonumber(x), tonumber(y), tonumber(z)) end
 	end
 	return CFrame.new(0, 10, 0)
 end
 
 local function getCFramePosition(data)
-	local cf = parseCFrame(data)
-	return cf.Position
+	return parseCFrame(data).Position
 end
 
 local function parseVector3(data)
 	if not data then return Vector3.new(1, 1, 1) end
 	if typeof(data) == "Vector3" then return data end
-	if typeof(data) == "table" and #data >= 3 then
-		return Vector3.new(unpack(data))
-	end
+	if typeof(data) == "table" and #data >= 3 then return Vector3.new(unpack(data)) end
 	return Vector3.new(1, 1, 1)
 end
 
 local function parseColor3(data)
 	if not data then return Color3.new(1, 1, 1) end
 	if typeof(data) == "Color3" then return data end
-	if typeof(data) == "table" and #data >= 3 then
-		return Color3.fromRGB(unpack(data))
-	end
+	if typeof(data) == "table" and #data >= 3 then return Color3.fromRGB(unpack(data)) end
 	return Color3.new(1, 1, 1)
 end
 
@@ -206,8 +182,8 @@ screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screenGui.Parent = player:WaitForChild("PlayerGui")
 
 local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 380, 0, 520)
-mainFrame.Position = UDim2.new(0.5, -190, 0.5, -260)
+mainFrame.Size = UDim2.new(0, 400, 0, 600)
+mainFrame.Position = UDim2.new(0.5, -200, 0.5, -300)
 mainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
 mainFrame.BorderSizePixel = 0
 mainFrame.Parent = screenGui
@@ -243,6 +219,7 @@ closeBtn.Parent = titleBar
 Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 6)
 closeBtn.MouseButton1Click:Connect(function() mainFrame.Visible = false end)
 
+-- Tab buttons
 local tabFrame = Instance.new("Frame")
 tabFrame.Size = UDim2.new(1, -20, 0, 36)
 tabFrame.Position = UDim2.new(0, 10, 0, 50)
@@ -276,20 +253,21 @@ end
 makeTabBtn("Local")
 makeTabBtn("GitHub")
 
+-- Content frames - now with proper scrolling
 local localFrame = Instance.new("Frame")
-localFrame.Size = UDim2.new(1, -20, 1, -160)
+localFrame.Size = UDim2.new(1, -20, 0, 200)
 localFrame.Position = UDim2.new(0, 10, 0, 92)
 localFrame.BackgroundTransparency = 1
 localFrame.Parent = mainFrame
 
 local githubFrame = Instance.new("Frame")
-githubFrame.Size = UDim2.new(1, -20, 1, -160)
+githubFrame.Size = UDim2.new(1, -20, 0, 200)
 githubFrame.Position = UDim2.new(0, 10, 0, 92)
 githubFrame.BackgroundTransparency = 1
 githubFrame.Visible = false
 githubFrame.Parent = mainFrame
 
--- Local tab
+-- Local tab content
 local refreshLocalBtn = Instance.new("TextButton")
 refreshLocalBtn.Size = UDim2.new(1, 0, 0, 32)
 refreshLocalBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
@@ -306,8 +284,8 @@ localScroll.Size = UDim2.new(1, 0, 1, -40)
 localScroll.Position = UDim2.new(0, 0, 0, 38)
 localScroll.BackgroundColor3 = Color3.fromRGB(12, 12, 16)
 localScroll.BorderSizePixel = 0
-localScroll.ScrollBarThickness = 4
-localScroll.ScrollBarImageColor3 = Color3.fromRGB(60, 60, 70)
+localScroll.ScrollBarThickness = 6
+localScroll.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 90)
 localScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
 localScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
 localScroll.Parent = localFrame
@@ -317,7 +295,7 @@ local localListLayout = Instance.new("UIListLayout")
 localListLayout.Padding = UDim.new(0, 4)
 localListLayout.Parent = localScroll
 
--- GitHub tab
+-- GitHub tab content
 local githubInput = Instance.new("TextBox")
 githubInput.Size = UDim2.new(1, 0, 0, 32)
 githubInput.BackgroundColor3 = Color3.fromRGB(28, 28, 36)
@@ -348,8 +326,8 @@ githubScroll.Size = UDim2.new(1, 0, 1, -78)
 githubScroll.Position = UDim2.new(0, 0, 0, 76)
 githubScroll.BackgroundColor3 = Color3.fromRGB(12, 12, 16)
 githubScroll.BorderSizePixel = 0
-githubScroll.ScrollBarThickness = 4
-githubScroll.ScrollBarImageColor3 = Color3.fromRGB(60, 60, 70)
+githubScroll.ScrollBarThickness = 6
+githubScroll.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 90)
 githubScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
 githubScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
 githubScroll.Parent = githubFrame
@@ -359,10 +337,253 @@ local githubListLayout = Instance.new("UIListLayout")
 githubListLayout.Padding = UDim.new(0, 4)
 githubListLayout.Parent = githubScroll
 
--- Progress
+-- ==================== SLIDERS SECTION (UNLIMITED) ====================
+local slidersFrame = Instance.new("Frame")
+slidersFrame.Size = UDim2.new(1, -20, 0, 110)
+slidersFrame.Position = UDim2.new(0, 10, 0, 298)
+slidersFrame.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
+slidersFrame.BorderSizePixel = 0
+slidersFrame.Parent = mainFrame
+Instance.new("UICorner", slidersFrame).CornerRadius = UDim.new(0, 8)
+
+local slidersTitle = Instance.new("TextLabel")
+slidersTitle.Size = UDim2.new(1, -10, 0, 18)
+slidersTitle.Position = UDim2.new(0, 5, 0, 4)
+slidersTitle.BackgroundTransparency = 1
+slidersTitle.Text = "⚙️ Build Settings (Click numbers to type exact values)"
+slidersTitle.TextColor3 = Color3.fromRGB(180, 180, 190)
+slidersTitle.TextSize = 11
+slidersTitle.Font = Enum.Font.GothamBold
+slidersTitle.TextXAlignment = Enum.TextXAlignment.Left
+slidersTitle.Parent = slidersFrame
+
+-- Speed Slider Row
+local speedLabel = Instance.new("TextLabel")
+speedLabel.Size = UDim2.new(0, 80, 0, 16)
+speedLabel.Position = UDim2.new(0, 8, 0, 24)
+speedLabel.BackgroundTransparency = 1
+speedLabel.Text = "Delay:"
+speedLabel.TextColor3 = Color3.fromRGB(200, 200, 210)
+speedLabel.TextSize = 11
+speedLabel.Font = Enum.Font.Gotham
+speedLabel.TextXAlignment = Enum.TextXAlignment.Left
+speedLabel.Parent = slidersFrame
+
+local speedValueBox = Instance.new("TextBox")
+speedValueBox.Size = UDim2.new(0, 70, 0, 20)
+speedValueBox.Position = UDim2.new(0, 85, 0, 22)
+speedValueBox.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+speedValueBox.Text = "0.005"
+speedValueBox.PlaceholderText = "0.005"
+speedValueBox.TextColor3 = Color3.fromRGB(0, 200, 255)
+speedValueBox.PlaceholderColor3 = Color3.fromRGB(100, 100, 110)
+speedValueBox.TextSize = 12
+speedValueBox.Font = Enum.Font.GothamBold
+speedValueBox.ClearTextOnFocus = false
+Instance.new("UICorner", speedValueBox).CornerRadius = UDim.new(0, 4)
+speedValueBox.Parent = slidersFrame
+
+local speedUnitLabel = Instance.new("TextLabel")
+speedUnitLabel.Size = UDim2.new(0, 50, 0, 16)
+speedUnitLabel.Position = UDim2.new(0, 158, 0, 24)
+speedUnitLabel.BackgroundTransparency = 1
+speedUnitLabel.Text = "seconds"
+speedUnitLabel.TextColor3 = Color3.fromRGB(150, 150, 160)
+speedUnitLabel.TextSize = 10
+speedUnitLabel.Font = Enum.Font.Gotham
+speedUnitLabel.TextXAlignment = Enum.TextXAlignment.Left
+speedUnitLabel.Parent = slidersFrame
+
+local speedSliderBg = Instance.new("Frame")
+speedSliderBg.Size = UDim2.new(1, -16, 0, 8)
+speedSliderBg.Position = UDim2.new(0, 8, 0, 46)
+speedSliderBg.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
+speedSliderBg.BorderSizePixel = 0
+speedSliderBg.Parent = slidersFrame
+Instance.new("UICorner", speedSliderBg).CornerRadius = UDim.new(1, 0)
+
+local speedSliderFill = Instance.new("Frame")
+speedSliderFill.Size = UDim2.new(0.001, 0, 1, 0)
+speedSliderFill.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+speedSliderFill.BorderSizePixel = 0
+speedSliderFill.Parent = speedSliderBg
+Instance.new("UICorner", speedSliderFill).CornerRadius = UDim.new(1, 0)
+
+local speedSliderKnob = Instance.new("TextButton")
+speedSliderKnob.Size = UDim2.new(0, 16, 0, 16)
+speedSliderKnob.Position = UDim2.new(0.001, -8, 0.5, -8)
+speedSliderKnob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+speedSliderKnob.Text = ""
+speedSliderKnob.Parent = speedSliderBg
+Instance.new("UICorner", speedSliderKnob).CornerRadius = UDim.new(1, 0)
+
+-- Batch Slider Row
+local batchLabel = Instance.new("TextLabel")
+batchLabel.Size = UDim2.new(0, 80, 0, 16)
+batchLabel.Position = UDim2.new(0, 8, 0, 66)
+batchLabel.BackgroundTransparency = 1
+batchLabel.Text = "Batch:"
+batchLabel.TextColor3 = Color3.fromRGB(200, 200, 210)
+batchLabel.TextSize = 11
+batchLabel.Font = Enum.Font.Gotham
+batchLabel.TextXAlignment = Enum.TextXAlignment.Left
+batchLabel.Parent = slidersFrame
+
+local batchValueBox = Instance.new("TextBox")
+batchValueBox.Size = UDim2.new(0, 70, 0, 20)
+batchValueBox.Position = UDim2.new(0, 85, 0, 64)
+batchValueBox.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+batchValueBox.Text = "10"
+batchValueBox.PlaceholderText = "10"
+batchValueBox.TextColor3 = Color3.fromRGB(0, 255, 100)
+batchValueBox.PlaceholderColor3 = Color3.fromRGB(100, 100, 110)
+batchValueBox.TextSize = 12
+batchValueBox.Font = Enum.Font.GothamBold
+batchValueBox.ClearTextOnFocus = false
+Instance.new("UICorner", batchValueBox).CornerRadius = UDim.new(0, 4)
+batchValueBox.Parent = slidersFrame
+
+local batchUnitLabel = Instance.new("TextLabel")
+batchUnitLabel.Size = UDim2.new(0, 50, 0, 16)
+batchUnitLabel.Position = UDim2.new(0, 158, 0, 66)
+batchUnitLabel.BackgroundTransparency = 1
+batchUnitLabel.Text = "parts"
+batchUnitLabel.TextColor3 = Color3.fromRGB(150, 150, 160)
+batchUnitLabel.TextSize = 10
+batchUnitLabel.Font = Enum.Font.Gotham
+batchUnitLabel.TextXAlignment = Enum.TextXAlignment.Left
+batchUnitLabel.Parent = slidersFrame
+
+local batchSliderBg = Instance.new("Frame")
+batchSliderBg.Size = UDim2.new(1, -16, 0, 8)
+batchSliderBg.Position = UDim2.new(0, 8, 0, 88)
+batchSliderBg.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
+batchSliderBg.BorderSizePixel = 0
+batchSliderBg.Parent = slidersFrame
+Instance.new("UICorner", batchSliderBg).CornerRadius = UDim.new(1, 0)
+
+local batchSliderFill = Instance.new("Frame")
+batchSliderFill.Size = UDim2.new(0.01, 0, 1, 0)
+batchSliderFill.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
+batchSliderFill.BorderSizePixel = 0
+batchSliderFill.Parent = batchSliderBg
+Instance.new("UICorner", batchSliderFill).CornerRadius = UDim.new(1, 0)
+
+local batchSliderKnob = Instance.new("TextButton")
+batchSliderKnob.Size = UDim2.new(0, 16, 0, 16)
+batchSliderKnob.Position = UDim2.new(0.01, -8, 0.5, -8)
+batchSliderKnob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+batchSliderKnob.Text = ""
+batchSliderKnob.Parent = batchSliderBg
+Instance.new("UICorner", batchSliderKnob).CornerRadius = UDim.new(1, 0)
+
+-- Speed value logic (0 to unlimited, slider maps 0-1 to 0-10s for convenience)
+local speedValue = 0.005
+local function updateSpeedFromValue(val)
+	val = math.max(0, val)
+	speedValue = val
+	CONFIG.BuildSpeed = val
+	speedValueBox.Text = string.format("%.4f", val)
+	local ratio = math.min(val / 10, 1)
+	speedSliderFill.Size = UDim2.new(ratio, 0, 1, 0)
+	speedSliderKnob.Position = UDim2.new(ratio, -8, 0.5, -8)
+end
+
+local function updateSpeedFromSlider(ratio)
+	ratio = math.clamp(ratio, 0, 1)
+	-- Exponential curve for finer control at low values
+	local val = (ratio ^ 2) * 10
+	if val < 0.001 then val = 0 end
+	updateSpeedFromValue(val)
+end
+
+-- Batch value logic (1 to unlimited, slider maps 0-1 to 1-1000 for convenience)
+local batchValue = 10
+local function updateBatchFromValue(val)
+	val = math.max(1, math.floor(val))
+	batchValue = val
+	CONFIG.BatchSize = val
+	batchValueBox.Text = tostring(val)
+	local ratio = math.min((val - 1) / 999, 1)
+	batchSliderFill.Size = UDim2.new(ratio, 0, 1, 0)
+	batchSliderKnob.Position = UDim2.new(ratio, -8, 0.5, -8)
+end
+
+local function updateBatchFromSlider(ratio)
+	ratio = math.clamp(ratio, 0, 1)
+	local val = math.floor(ratio * 999) + 1
+	updateBatchFromValue(val)
+end
+
+-- Text box input handlers
+speedValueBox.FocusLost:Connect(function()
+	local val = tonumber(speedValueBox.Text)
+	if val then
+		updateSpeedFromValue(val)
+	else
+		updateSpeedFromValue(speedValue)
+	end
+end)
+
+batchValueBox.FocusLost:Connect(function()
+	local val = tonumber(batchValueBox.Text)
+	if val then
+		updateBatchFromValue(val)
+	else
+		updateBatchFromValue(batchValue)
+	end
+end)
+
+-- Slider dragging logic
+local function makeSliderDraggable(knob, bg, updateFunc)
+	local dragging = false
+
+	knob.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			dragging = true
+		end
+	end)
+
+	bg.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			local pos = input.Position.X
+			local bgPos = bg.AbsolutePosition.X
+			local bgSize = bg.AbsoluteSize.X
+			local ratio = (pos - bgPos) / bgSize
+			updateFunc(ratio)
+			dragging = true
+		end
+	end)
+
+	local UserInputService = game:GetService("UserInputService")
+	UserInputService.InputChanged:Connect(function(input)
+		if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+			local pos = input.Position.X
+			local bgPos = bg.AbsolutePosition.X
+			local bgSize = bg.AbsoluteSize.X
+			local ratio = (pos - bgPos) / bgSize
+			updateFunc(ratio)
+		end
+	end)
+
+	UserInputService.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			dragging = false
+		end
+	end)
+end
+
+makeSliderDraggable(speedSliderKnob, speedSliderBg, updateSpeedFromSlider)
+makeSliderDraggable(batchSliderKnob, batchSliderBg, updateBatchFromSlider)
+
+-- Initialize sliders
+updateSpeedFromValue(0.005)
+updateBatchFromValue(10)
+
+-- Progress bar
 local progressFrame = Instance.new("Frame")
 progressFrame.Size = UDim2.new(1, -20, 0, 4)
-progressFrame.Position = UDim2.new(0, 10, 1, -56)
+progressFrame.Position = UDim2.new(0, 10, 1, -76)
 progressFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
 progressFrame.BorderSizePixel = 0
 progressFrame.Visible = false
@@ -378,7 +599,7 @@ Instance.new("UICorner", progressFill).CornerRadius = UDim.new(1, 0)
 
 local statusLabel = Instance.new("TextLabel")
 statusLabel.Size = UDim2.new(1, -20, 0, 22)
-statusLabel.Position = UDim2.new(0, 10, 1, -48)
+statusLabel.Position = UDim2.new(0, 10, 1, -68)
 statusLabel.BackgroundTransparency = 1
 statusLabel.Text = "Ready"
 statusLabel.TextColor3 = Color3.fromRGB(140, 140, 150)
@@ -801,11 +1022,9 @@ local function teleportToBuild(targetPosition)
 	local hrp = char:FindFirstChild("HumanoidRootPart")
 	if not hrp then return end
 
-	-- Teleport 20 studs above the build center so player can see it being built
 	local teleportPos = targetPosition + Vector3.new(0, 30, 0)
 	hrp.CFrame = CFrame.new(teleportPos)
 
-	-- Also set camera to look at the build area
 	local camera = workspace.CurrentCamera
 	camera.CFrame = CFrame.new(teleportPos, targetPosition)
 
@@ -859,7 +1078,7 @@ buildBtn.MouseButton1Click:Connect(function()
 		notify("Building tools received!")
 	end
 
-	-- STEP 1b: Equip the tool (CRITICAL - F3X only works when equipped)
+	-- STEP 1b: Equip the tool
 	statusLabel.Text = "Equipping building tools..."
 	local equipped = equipBuildingTool()
 	if not equipped then
@@ -868,7 +1087,7 @@ buildBtn.MouseButton1Click:Connect(function()
 		buildBtn.Visible = true
 		return
 	end
-	task.wait(0.5) -- Give time for tool to fully equip
+	task.wait(0.5)
 
 	-- STEP 2: Init F3X
 	if not F3X:Init() then
@@ -884,11 +1103,11 @@ buildBtn.MouseButton1Click:Connect(function()
 	local modelMap = {}
 	local failedCount = 0
 
-	statusLabel.Text = string.format("Building %d parts...", total)
+	statusLabel.Text = string.format("Building %d parts (batch: %d, delay: %.4fs)...", total, CONFIG.BatchSize, CONFIG.BuildSpeed)
 	notify("Starting build: " .. selectedBuildName)
-	dprint("Build started:", total, "parts at center", tostring(buildCenter))
+	dprint("Build started:", total, "parts at center", tostring(buildCenter), "batch:", CONFIG.BatchSize, "speed:", CONFIG.BuildSpeed)
 
-	-- Create models via F3X CreateGroup so server knows them
+	-- Create models via F3X CreateGroup
 	if selectedBuildData.Models then
 		for modelRef, modelInfo in pairs(selectedBuildData.Models) do
 			dprint("Creating model:", modelRef, modelInfo.Name)
@@ -913,7 +1132,10 @@ buildBtn.MouseButton1Click:Connect(function()
 		end
 	end
 
-	-- Build all parts into workspace first (F3X CreatePart ONLY accepts workspace as parent)
+	-- Build all parts into workspace first
+	local batchSize = CONFIG.BatchSize
+	local buildSpeed = CONFIG.BuildSpeed
+
 	for i, partData in ipairs(parts) do
 		local className = partData.ClassName or "Part"
 		local partType = "Normal"
@@ -927,11 +1149,9 @@ buildBtn.MouseButton1Click:Connect(function()
 		elseif className == "MeshPart" then partType = "Normal"
 		end
 
-		-- Parse CFrame robustly
 		local cf = parseCFrame(partData.CFrame)
 		dprint("Part", i, "Type:", partType, "CF:", tostring(cf))
 
-		-- CRITICAL: Always pass workspace. Never pass a model as parent.
 		local part
 		local createOk, createResult = pcall(function()
 			part = F3X:CreatePart(partType, cf)
@@ -945,7 +1165,6 @@ buildBtn.MouseButton1Click:Connect(function()
 			table.insert(builtParts, part)
 			partMap[i] = part
 
-			-- Apply properties in batches
 			local resizeChanges = {}
 			local colorChanges = {}
 			local materialChanges = {}
@@ -987,7 +1206,6 @@ buildBtn.MouseButton1Click:Connect(function()
 				table.insert(surfaceChanges, {Part = part, Surfaces = surfaces})
 			end
 
-			-- Apply all sync operations
 			pcall(function() if #resizeChanges > 0 then F3X:SyncResize(resizeChanges) end end)
 			pcall(function() if #colorChanges > 0 then F3X:SyncColor(colorChanges) end end)
 			pcall(function() if #materialChanges > 0 then F3X:SyncMaterial(materialChanges) end end)
@@ -995,17 +1213,14 @@ buildBtn.MouseButton1Click:Connect(function()
 			pcall(function() if #anchorChanges > 0 then F3X:SyncAnchor(anchorChanges) end end)
 			pcall(function() if #collisionChanges > 0 then F3X:SyncCollision(collisionChanges) end end)
 
-			-- Name
 			if partData.Name then
 				pcall(function() F3X:SetName({part}, partData.Name) end)
 			end
 
-			-- Locked
 			if partData.Locked ~= nil then
 				pcall(function() F3X:SetLocked({part}, partData.Locked) end)
 			end
 
-			-- Direct properties
 			if partData.CastShadow ~= nil then part.CastShadow = partData.CastShadow end
 			if partData.Shape then pcall(function() part.Shape = parseShape(partData.Shape) end) end
 			if partData.Massless then part.Massless = true end
@@ -1021,7 +1236,6 @@ buildBtn.MouseButton1Click:Connect(function()
 				end)
 			end
 
-			-- MeshPart extras
 			if className == "MeshPart" then
 				if partData.MeshId or partData.TextureID or partData.RenderFidelity then
 					pcall(function()
@@ -1036,7 +1250,6 @@ buildBtn.MouseButton1Click:Connect(function()
 				end
 			end
 
-			-- Children (decals, meshes, lights, etc.)
 			if partData.Children then
 				for _, childData in ipairs(partData.Children) do
 					pcall(function()
@@ -1082,15 +1295,17 @@ buildBtn.MouseButton1Click:Connect(function()
 			end
 		end
 
-		-- Progress
-		if i % 10 == 0 or i == total then
+		-- Update progress based on batch size
+		if i % batchSize == 0 or i == total then
 			progressFill.Size = UDim2.new(i / total, 0, 1, 0)
-			statusLabel.Text = string.format("Building... %d/%d parts (%d failed)", i, total, failedCount)
-			if CONFIG.BuildSpeed > 0 then task.wait(CONFIG.BuildSpeed) end
+			statusLabel.Text = string.format("Building... %d/%d parts (%d failed) [batch:%d delay:%.4fs]", i, total, failedCount, batchSize, buildSpeed)
+			if buildSpeed > 0 then
+				task.wait(buildSpeed)
+			end
 		end
 	end
 
-	-- Reparent parts to models AFTER all creation (batch by target)
+	-- Reparent parts to models AFTER all creation
 	local parentGroups = {}
 	for i, partData in ipairs(parts) do
 		local part = partMap[i]
