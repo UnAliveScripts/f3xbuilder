@@ -1,6 +1,6 @@
 --[[
  ============================================
- BUILD SELECTOR & F3X EXPORTER (OPTIMIZED v2)
+ BUILD SELECTOR & F3X EXPORTER (OPTIMIZED v3)
  Left-click drag-select | Xeno workspace save
  Exports in F3X-compatible JSON format
  Place in StarterPlayerScripts as LocalScript
@@ -48,10 +48,8 @@ local CONFIG = {
 	MaxParts = 100000,
 	VisualLimit = 500,
 	DragThreshold = 5,
-	-- Export tuning for massive builds
 	StreamBatch = 2000,       -- parts per RAM buffer
 	FileChunkSize = 5000,     -- parts per file when chunking
-	YieldInterval = 1000,     -- yield every N parts
 	ListCap = 500,            -- max visible list items
 }
 
@@ -83,7 +81,6 @@ mainFrame.BorderSizePixel = 0
 mainFrame.Parent = screenGui
 Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 12)
 
--- Title
 local titleBar = Instance.new("Frame")
 titleBar.Size = UDim2.new(1, 0, 0, 44)
 titleBar.BackgroundColor3 = Color3.fromRGB(28, 28, 36)
@@ -113,7 +110,6 @@ countText.Font = Enum.Font.Gotham
 countText.TextXAlignment = Enum.TextXAlignment.Right
 countText.Parent = titleBar
 
--- Status
 local statusLabel = Instance.new("TextLabel")
 statusLabel.Size = UDim2.new(1, -20, 0, 22)
 statusLabel.Position = UDim2.new(0, 10, 0, 48)
@@ -126,7 +122,6 @@ statusLabel.TextWrapped = true
 statusLabel.TextYAlignment = Enum.TextYAlignment.Top
 statusLabel.Parent = mainFrame
 
--- Progress Bar
 local progressFrame = Instance.new("Frame")
 progressFrame.Size = UDim2.new(1, -20, 0, 4)
 progressFrame.Position = UDim2.new(0, 10, 0, 74)
@@ -143,7 +138,6 @@ progressFill.BorderSizePixel = 0
 progressFill.Parent = progressFrame
 Instance.new("UICorner", progressFill).CornerRadius = UDim.new(1, 0)
 
--- Scroll List
 local scrollFrame = Instance.new("ScrollingFrame")
 scrollFrame.Size = UDim2.new(1, -20, 1, -310)
 scrollFrame.Position = UDim2.new(0, 10, 0, 84)
@@ -160,7 +154,6 @@ local listLayout = Instance.new("UIListLayout")
 listLayout.Padding = UDim.new(0, 3)
 listLayout.Parent = scrollFrame
 
--- Toggles
 local togglesFrame = Instance.new("Frame")
 togglesFrame.Size = UDim2.new(1, -20, 0, 70)
 togglesFrame.Position = UDim2.new(0, 10, 1, -218)
@@ -224,7 +217,6 @@ toggles.Decals = createToggle("Include Decals", true)
 toggles.Meshes = createToggle("Include Meshes", true)
 toggles.Lights = createToggle("Include Lights", true)
 
--- Buttons
 local btnFrame = Instance.new("Frame")
 btnFrame.Size = UDim2.new(1, -20, 0, 142)
 btnFrame.Position = UDim2.new(0, 10, 1, -142)
@@ -262,7 +254,6 @@ exportLuaBtn.Parent = btnFrame
 local clearBtn = makeBtn("❌ Clear Selection", Color3.fromRGB(180, 50, 50), 30)
 clearBtn.Parent = btnFrame
 
--- Marquee
 local marquee = Instance.new("Frame")
 marquee.BackgroundColor3 = CONFIG.SelectionColor
 marquee.BackgroundTransparency = CONFIG.BoxFillTransparency
@@ -276,7 +267,6 @@ marqueeStroke.Color = CONFIG.SelectionColor
 marqueeStroke.Thickness = 2
 marqueeStroke.Parent = marquee
 
--- Notification
 local notif = Instance.new("Frame")
 notif.Size = UDim2.new(0, 400, 0, 50)
 notif.Position = UDim2.new(0.5, -200, 0, -70)
@@ -320,7 +310,6 @@ local function clearList()
 	end
 end
 
--- Object pool for list items (prevents UI death on 45K parts)
 local listItemPool = {}
 local listItemUsed = 0
 
@@ -622,7 +611,6 @@ UserInputService.InputEnded:Connect(function(input)
 	dragCurrentPos = nil
 end)
 
--- Draggable UI
 local draggingUI = false
 local uiDragStart = nil
 local uiStartPos = nil
@@ -694,7 +682,6 @@ local function fmtVal(v)
 end
 
 -- ==================== EXPORT CORE ====================
--- Streaming file writer (handles both appendfile and chunked fallback)
 local function streamExport(builderFunc, baseFilename, totalParts, ext)
 	if not hasFileAccess then
 		notify("No file access!")
@@ -723,7 +710,6 @@ local function streamExport(builderFunc, baseFilename, totalParts, ext)
 		if canStream then
 			filename = SAVE_FOLDER .. "/" .. baseFilename .. "_" .. timestamp .. "." .. ext
 			if chunk == 1 then
-				-- Start fresh file
 				local ok = pcall(function() writefile(filename, "") end)
 				if not ok then
 					notify("Failed to create file!")
@@ -828,278 +814,303 @@ exportF3XBtn.MouseButton1Click:Connect(function()
 
 		for i = startIdx, endIdx do
 			local part = selectedParts[i]
-			if i > startIdx then push(",") end
 
-			-- Core part data
-			push('{"Index":')
-			push(tostring(i))
-			push(',"ClassName":"')
-			push(part.ClassName)
-			push('","Name":"')
-			push(part.Name:gsub('"', '\\"'))
-			push('"')
-
-			if part:IsA("BasePart") then
-				local cf = part.CFrame
-				local c = table.pack(cf:GetComponents())
-				push(',"CFrame":[')
-				push(string.format("%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f",
-					c[1], c[2], c[3], c[4], c[5], c[6], c[7], c[8], c[9], c[10], c[11], c[12]))
-				push(']')
-				push(',"Size":[')
-				push(string.format("%.4f,%.4f,%.4f", part.Size.X, part.Size.Y, part.Size.Z))
-				push(']')
-				push(',"Color":[')
-				push(string.format("%d,%d,%d",
-					math.floor(part.Color.R * 255 + 0.5),
-					math.floor(part.Color.G * 255 + 0.5),
-					math.floor(part.Color.B * 255 + 0.5)))
-				push(']')
-				push(',"Material":"')
-				push(tostring(part.Material))
-				push('","Transparency":')
-				push(string.format("%.4f", part.Transparency))
-				push(',"Reflectance":')
-				push(string.format("%.4f", part.Reflectance))
-				push(',"CanCollide":')
-				push(tostring(part.CanCollide))
-				push(',"Anchored":')
-				push(tostring(part.Anchored))
-				push(',"CastShadow":')
-				push(tostring(part.CastShadow))
-				push(',"Locked":')
-				push(tostring(part.Locked))
-				push(',"TopSurface":"')
-				push(tostring(part.TopSurface))
-				push('","BottomSurface":"')
-				push(tostring(part.BottomSurface))
-				push('","LeftSurface":"')
-				push(tostring(part.LeftSurface))
-				push('","RightSurface":"')
-				push(tostring(part.RightSurface))
-				push('","FrontSurface":"')
-				push(tostring(part.FrontSurface))
-				push('","BackSurface":"')
-				push(tostring(part.BackSurface))
-				push('"')
-
-				if part:IsA("Part") then
-					push(',"Shape":"')
-					push(tostring(part.Shape))
-					push('"')
+			-- SAFETY: Each part is isolated in pcall so one bad part never kills 45K export
+			local partOk, partJson = pcall(function()
+				local pbuf = {}
+				local pc = 0
+				local function pp(s)
+					pc += 1
+					pbuf[pc] = s
 				end
-			end
 
-			if part:IsA("MeshPart") then
-				if part.MeshId and part.MeshId ~= "" then
-					push(',"MeshId":"')
-					push(part.MeshId)
-					push('"')
+				pp('{"Index":')
+				pp(tostring(i))
+				pp(',"ClassName":"')
+				pp(part.ClassName)
+				pp('","Name":"')
+				pp(part.Name:gsub('"', '\\"'))
+				pp('"')
+
+				if part:IsA("BasePart") then
+					local cf = part.CFrame
+					local c = table.pack(cf:GetComponents())
+					pp(',"CFrame":[')
+					pp(string.format("%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f",
+						c[1], c[2], c[3], c[4], c[5], c[6], c[7], c[8], c[9], c[10], c[11], c[12]))
+					pp(']')
+					pp(',"Size":[')
+					pp(string.format("%.4f,%.4f,%.4f", part.Size.X, part.Size.Y, part.Size.Z))
+					pp(']')
+					pp(',"Color":[')
+					pp(string.format("%d,%d,%d",
+						math.floor(part.Color.R * 255 + 0.5),
+						math.floor(part.Color.G * 255 + 0.5),
+						math.floor(part.Color.B * 255 + 0.5)))
+					pp(']')
+					pp(',"Material":"')
+					pp(tostring(part.Material))
+					pp('","Transparency":')
+					pp(string.format("%.4f", part.Transparency))
+					pp(',"Reflectance":')
+					pp(string.format("%.4f", part.Reflectance))
+					pp(',"CanCollide":')
+					pp(tostring(part.CanCollide))
+					pp(',"Anchored":')
+					pp(tostring(part.Anchored))
+					pp(',"CastShadow":')
+					pp(tostring(part.CastShadow))
+					pp(',"Locked":')
+					pp(tostring(part.Locked))
+					pp(',"TopSurface":"')
+					pp(tostring(part.TopSurface))
+					pp('","BottomSurface":"')
+					pp(tostring(part.BottomSurface))
+					pp('","LeftSurface":"')
+					pp(tostring(part.LeftSurface))
+					pp('","RightSurface":"')
+					pp(tostring(part.RightSurface))
+					pp('","FrontSurface":"')
+					pp(tostring(part.FrontSurface))
+					pp('","BackSurface":"')
+					pp(tostring(part.BackSurface))
+					pp('"')
+
+					if part:IsA("Part") then
+						pp(',"Shape":"')
+						pp(tostring(part.Shape))
+						pp('"')
+					end
 				end
-				if part.TextureID and part.TextureID ~= "" then
-					push(',"TextureID":"')
-					push(part.TextureID)
-					push('"')
+
+				if part:IsA("MeshPart") then
+					if part.MeshId and part.MeshId ~= "" then
+						pp(',"MeshId":"')
+						pp(part.MeshId)
+						pp('"')
+					end
+					if part.TextureID and part.TextureID ~= "" then
+						pp(',"TextureID":"')
+						pp(part.TextureID)
+						pp('"')
+					end
+					pp(',"RenderFidelity":"')
+					pp(tostring(part.RenderFidelity))
+					pp('","CollisionFidelity":"')
+					pp(tostring(part.CollisionFidelity))
+					pp('"')
 				end
-				push(',"RenderFidelity":"')
-				push(tostring(part.RenderFidelity))
-				push('","CollisionFidelity":"')
-				push(tostring(part.CollisionFidelity))
-				push('"')
-			end
 
-			if part.Massless then
-				push(',"Massless":true')
-			end
+				if part.Massless then
+					pp(',"Massless":true')
+				end
 
-			if part.CollisionGroupId ~= 0 then
-				push(',"CollisionGroupId":')
-				push(tostring(part.CollisionGroupId))
-			end
+				if part.CollisionGroupId ~= 0 then
+					pp(',"CollisionGroupId":')
+					pp(tostring(part.CollisionGroupId))
+				end
 
-			local cpp = part.CustomPhysicalProperties
-			if cpp then
-				push(',"CustomPhysicalProperties":{"Density":')
-				push(string.format("%.4f", cpp.Density))
-				push(',"Friction":')
-				push(string.format("%.4f", cpp.Friction))
-				push(',"Elasticity":')
-				push(string.format("%.4f", cpp.Elasticity))
-				push(',"FrictionWeight":')
-				push(string.format("%.4f", cpp.FrictionWeight))
-				push(',"ElasticityWeight":')
-				push(string.format("%.4f", cpp.ElasticityWeight))
-				push('}')
-			end
+				local cpp = part.CustomPhysicalProperties
+				if cpp then
+					pp(',"CustomPhysicalProperties":{"Density":')
+					pp(string.format("%.4f", cpp.Density))
+					pp(',"Friction":')
+					pp(string.format("%.4f", cpp.Friction))
+					pp(',"Elasticity":')
+					pp(string.format("%.4f", cpp.Elasticity))
+					pp(',"FrictionWeight":')
+					pp(string.format("%.4f", cpp.FrictionWeight))
+					pp(',"ElasticityWeight":')
+					pp(string.format("%.4f", cpp.ElasticityWeight))
+					pp('}')
+				end
 
-			-- Parent
-			if hierarchy then
-				local parent = part.Parent
-				if parent and parent ~= workspace then
-					push(',"ParentName":"')
-					push(parent.Name:gsub('"', '\\"'))
-					push('","ParentClass":"')
-					push(parent.ClassName)
-					push('"')
+				-- Parent
+				if hierarchy then
+					local parent = part.Parent
+					if parent and parent ~= workspace then
+						pp(',"ParentName":"')
+						pp(parent.Name:gsub('"', '\\"'))
+						pp('","ParentClass":"')
+						pp(parent.ClassName)
+						pp('"')
+					else
+						pp(',"ParentName":"workspace"')
+					end
 				else
-					push(',"ParentName":"workspace"')
+					pp(',"ParentName":"workspace"')
 				end
+
+				-- Children
+				pp(',"Children":[')
+				local childJson = {}
+				local childCount = 0
+
+				if includeDecals then
+					for _, child in ipairs(part:GetChildren()) do
+						if child:IsA("Decal") or child:IsA("Texture") then
+							local cbuf = {}
+							cbuf[1] = '{"ClassName":"'
+							cbuf[2] = child.ClassName
+							cbuf[3] = '","Texture":"'
+							cbuf[4] = child.Texture
+							cbuf[5] = '","Transparency":'
+							cbuf[6] = string.format("%.4f", child.Transparency)
+							cbuf[7] = ',"Face":"'
+							cbuf[8] = tostring(child.Face)
+							cbuf[9] = '"'
+							-- FIX: pcall Color3 just in case
+							local ok, c3 = pcall(function() return child.Color3 end)
+							if ok then
+								cbuf[10] = ',"Color3":['
+								cbuf[11] = string.format("%d,%d,%d",
+									math.floor(c3.R * 255 + 0.5),
+									math.floor(c3.G * 255 + 0.5),
+									math.floor(c3.B * 255 + 0.5))
+								cbuf[12] = ']'
+							end
+							cbuf[#cbuf + 1] = '}'
+							childCount += 1
+							childJson[childCount] = table.concat(cbuf)
+						end
+					end
+				end
+
+				if includeMeshes then
+					for _, child in ipairs(part:GetChildren()) do
+						if child:IsA("SpecialMesh") then
+							local cbuf = {}
+							cbuf[1] = '{"ClassName":"SpecialMesh","MeshType":"'
+							cbuf[2] = tostring(child.MeshType)
+							cbuf[3] = '","MeshId":"'
+							cbuf[4] = child.MeshId
+							cbuf[5] = '","TextureId":"'
+							cbuf[6] = child.TextureId
+							cbuf[7] = '","Scale":['
+							cbuf[8] = string.format("%.4f,%.4f,%.4f", child.Scale.X, child.Scale.Y, child.Scale.Z)
+							cbuf[9] = '],"Offset":['
+							cbuf[10] = string.format("%.4f,%.4f,%.4f", child.Offset.X, child.Offset.Y, child.Offset.Z)
+							cbuf[11] = ']}'
+							childCount += 1
+							childJson[childCount] = table.concat(cbuf)
+						elseif child:IsA("BlockMesh") then
+							local cbuf = {}
+							cbuf[1] = '{"ClassName":"BlockMesh","Scale":['
+							cbuf[2] = string.format("%.4f,%.4f,%.4f", child.Scale.X, child.Scale.Y, child.Scale.Z)
+							cbuf[3] = '],"Offset":['
+							cbuf[4] = string.format("%.4f,%.4f,%.4f", child.Offset.X, child.Offset.Y, child.Offset.Z)
+							cbuf[5] = ']}'
+							childCount += 1
+							childJson[childCount] = table.concat(cbuf)
+						elseif child:IsA("CylinderMesh") then
+							local cbuf = {}
+							cbuf[1] = '{"ClassName":"CylinderMesh","Scale":['
+							cbuf[2] = string.format("%.4f,%.4f,%.4f", child.Scale.X, child.Scale.Y, child.Scale.Z)
+							cbuf[3] = '],"Offset":['
+							cbuf[4] = string.format("%.4f,%.4f,%.4f", child.Offset.X, child.Offset.Y, child.Offset.Z)
+							cbuf[5] = ']}'
+							childCount += 1
+							childJson[childCount] = table.concat(cbuf)
+						end
+					end
+				end
+
+				if includeLights then
+					for _, child in ipairs(part:GetChildren()) do
+						if child:IsA("SurfaceLight") or child:IsA("PointLight") or child:IsA("SpotLight") then
+							local cbuf = {}
+							cbuf[1] = '{"ClassName":"'
+							cbuf[2] = child.ClassName
+							cbuf[3] = '","Color":['
+							cbuf[4] = string.format("%d,%d,%d",
+								math.floor(child.Color.R * 255 + 0.5),
+								math.floor(child.Color.G * 255 + 0.5),
+								math.floor(child.Color.B * 255 + 0.5))
+							cbuf[5] = '],"Brightness":'
+							cbuf[6] = string.format("%.4f", child.Brightness)
+							cbuf[7] = ',"Range":'
+							cbuf[8] = string.format("%.4f", child.Range)
+							cbuf[9] = ',"Shadows":'
+							cbuf[10] = tostring(child.Shadows)
+							-- FIX: PointLight does NOT have Face. Only SurfaceLight and SpotLight do.
+							if not child:IsA("PointLight") then
+								cbuf[#cbuf + 1] = ',"Face":"'
+								cbuf[#cbuf + 1] = tostring(child.Face)
+								cbuf[#cbuf + 1] = '"'
+							end
+							if child:IsA("SurfaceLight") or child:IsA("SpotLight") then
+								cbuf[#cbuf + 1] = ',"Angle":'
+								cbuf[#cbuf + 1] = string.format("%.4f", child.Angle)
+							end
+							cbuf[#cbuf + 1] = '}'
+							childCount += 1
+							childJson[childCount] = table.concat(cbuf)
+						end
+					end
+				end
+
+				pp(table.concat(childJson, ","))
+				pp(']')
+
+				-- Welds
+				if includeWelds then
+					local weldJson = {}
+					local weldCount = 0
+					for _, child in ipairs(part:GetChildren()) do
+						if child:IsA("Weld") or child:IsA("Motor") or child:IsA("Motor6D") then
+							if partMap[child.Part0] and partMap[child.Part1] then
+								local wbuf = {}
+								wbuf[1] = '{"ClassName":"'
+								wbuf[2] = child.ClassName
+								wbuf[3] = '","Part0Index":'
+								wbuf[4] = tostring(partMap[child.Part0])
+								wbuf[5] = ',"Part1Index":'
+								wbuf[6] = tostring(partMap[child.Part1])
+								local c0 = table.pack(child.C0:GetComponents())
+								wbuf[7] = ',"C0":['
+								wbuf[8] = string.format("%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f",
+									c0[1], c0[2], c0[3], c0[4], c0[5], c0[6], c0[7], c0[8], c0[9], c0[10], c0[11], c0[12])
+								wbuf[9] = ']'
+								local c1 = table.pack(child.C1:GetComponents())
+								wbuf[10] = ',"C1":['
+								wbuf[11] = string.format("%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f",
+									c1[1], c1[2], c1[3], c1[4], c1[5], c1[6], c1[7], c1[8], c1[9], c1[10], c1[11], c1[12])
+								wbuf[12] = ']}'
+								weldCount += 1
+								weldJson[weldCount] = table.concat(wbuf)
+							end
+						elseif child:IsA("WeldConstraint") then
+							if partMap[child.Part0] and partMap[child.Part1] then
+								local wbuf = {}
+								wbuf[1] = '{"ClassName":"WeldConstraint","Part0Index":'
+								wbuf[2] = tostring(partMap[child.Part0])
+								wbuf[3] = ',"Part1Index":'
+								wbuf[4] = tostring(partMap[child.Part1])
+								wbuf[5] = '}'
+								weldCount += 1
+								weldJson[weldCount] = table.concat(wbuf)
+							end
+						end
+					end
+					if weldCount > 0 then
+						pp(',"Welds":[')
+						pp(table.concat(weldJson, ","))
+						pp(']')
+					end
+				end
+
+				pp('}')
+				return table.concat(pbuf)
+			end)
+
+			if partOk then
+				if i > startIdx then push(",") end
+				push(partJson)
 			else
-				push(',"ParentName":"workspace"')
+				warn(string.format("[BuildSelector] Part %d (%s) failed: %s", i, part.Name, tostring(partJson)))
+				if i > startIdx then push(",") end
+				push('{"Index":' .. tostring(i) .. ',"Name":' .. string.format("%q", part.Name) .. ',"Error":' .. string.format("%q", tostring(partJson):sub(1,200)) .. '}')
 			end
-
-			-- Children
-			push(',"Children":[')
-			local childJson = {}
-			local childCount = 0
-
-			if includeDecals then
-				for _, child in ipairs(part:GetChildren()) do
-					if child:IsA("Decal") or child:IsA("Texture") then
-						local cbuf = {}
-						cbuf[1] = '{"ClassName":"'
-						cbuf[2] = child.ClassName
-						cbuf[3] = '","Texture":"'
-						cbuf[4] = child.Texture
-						cbuf[5] = '","Transparency":'
-						cbuf[6] = string.format("%.4f", child.Transparency)
-						cbuf[7] = ',"Face":"'
-						cbuf[8] = tostring(child.Face)
-						cbuf[9] = '"'
-						local c3 = child.Color3
-						cbuf[10] = ',"Color3":['
-						cbuf[11] = string.format("%d,%d,%d",
-							math.floor(c3.R * 255 + 0.5),
-							math.floor(c3.G * 255 + 0.5),
-							math.floor(c3.B * 255 + 0.5))
-						cbuf[12] = ']}'
-						childCount += 1
-						childJson[childCount] = table.concat(cbuf)
-					end
-				end
-			end
-
-			if includeMeshes then
-				for _, child in ipairs(part:GetChildren()) do
-					if child:IsA("SpecialMesh") then
-						local cbuf = {}
-						cbuf[1] = '{"ClassName":"SpecialMesh","MeshType":"'
-						cbuf[2] = tostring(child.MeshType)
-						cbuf[3] = '","MeshId":"'
-						cbuf[4] = child.MeshId
-						cbuf[5] = '","TextureId":"'
-						cbuf[6] = child.TextureId
-						cbuf[7] = '","Scale":['
-						cbuf[8] = string.format("%.4f,%.4f,%.4f", child.Scale.X, child.Scale.Y, child.Scale.Z)
-						cbuf[9] = '],"Offset":['
-						cbuf[10] = string.format("%.4f,%.4f,%.4f", child.Offset.X, child.Offset.Y, child.Offset.Z)
-						cbuf[11] = ']}'
-						childCount += 1
-						childJson[childCount] = table.concat(cbuf)
-					elseif child:IsA("BlockMesh") then
-						local cbuf = {}
-						cbuf[1] = '{"ClassName":"BlockMesh","Scale":['
-						cbuf[2] = string.format("%.4f,%.4f,%.4f", child.Scale.X, child.Scale.Y, child.Scale.Z)
-						cbuf[3] = '],"Offset":['
-						cbuf[4] = string.format("%.4f,%.4f,%.4f", child.Offset.X, child.Offset.Y, child.Offset.Z)
-						cbuf[5] = ']}'
-						childCount += 1
-						childJson[childCount] = table.concat(cbuf)
-					elseif child:IsA("CylinderMesh") then
-						local cbuf = {}
-						cbuf[1] = '{"ClassName":"CylinderMesh","Scale":['
-						cbuf[2] = string.format("%.4f,%.4f,%.4f", child.Scale.X, child.Scale.Y, child.Scale.Z)
-						cbuf[3] = '],"Offset":['
-						cbuf[4] = string.format("%.4f,%.4f,%.4f", child.Offset.X, child.Offset.Y, child.Offset.Z)
-						cbuf[5] = ']}'
-						childCount += 1
-						childJson[childCount] = table.concat(cbuf)
-					end
-				end
-			end
-
-			if includeLights then
-				for _, child in ipairs(part:GetChildren()) do
-					if child:IsA("SurfaceLight") or child:IsA("PointLight") or child:IsA("SpotLight") then
-						local cbuf = {}
-						cbuf[1] = '{"ClassName":"'
-						cbuf[2] = child.ClassName
-						cbuf[3] = '","Color":['
-						cbuf[4] = string.format("%d,%d,%d",
-							math.floor(child.Color.R * 255 + 0.5),
-							math.floor(child.Color.G * 255 + 0.5),
-							math.floor(child.Color.B * 255 + 0.5))
-						cbuf[5] = '],"Brightness":'
-						cbuf[6] = string.format("%.4f", child.Brightness)
-						cbuf[7] = ',"Range":'
-						cbuf[8] = string.format("%.4f", child.Range)
-						cbuf[9] = ',"Shadows":'
-						cbuf[10] = tostring(child.Shadows)
-						cbuf[11] = ',"Face":"'
-						cbuf[12] = tostring(child.Face)
-						cbuf[13] = '"'
-						if child:IsA("SurfaceLight") or child:IsA("SpotLight") then
-							cbuf[14] = ',"Angle":'
-							cbuf[15] = string.format("%.4f", child.Angle)
-						end
-						cbuf[#cbuf + 1] = '}'
-						childCount += 1
-						childJson[childCount] = table.concat(cbuf)
-					end
-				end
-			end
-
-			push(table.concat(childJson, ","))
-			push(']')
-
-			-- Welds
-			if includeWelds then
-				local weldJson = {}
-				local weldCount = 0
-				for _, child in ipairs(part:GetChildren()) do
-					if child:IsA("Weld") or child:IsA("Motor") or child:IsA("Motor6D") then
-						if partMap[child.Part0] and partMap[child.Part1] then
-							local wbuf = {}
-							wbuf[1] = '{"ClassName":"'
-							wbuf[2] = child.ClassName
-							wbuf[3] = '","Part0Index":'
-							wbuf[4] = tostring(partMap[child.Part0])
-							wbuf[5] = ',"Part1Index":'
-							wbuf[6] = tostring(partMap[child.Part1])
-							local c0 = table.pack(child.C0:GetComponents())
-							wbuf[7] = ',"C0":['
-							wbuf[8] = string.format("%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f",
-								c0[1], c0[2], c0[3], c0[4], c0[5], c0[6], c0[7], c0[8], c0[9], c0[10], c0[11], c0[12])
-							wbuf[9] = ']'
-							local c1 = table.pack(child.C1:GetComponents())
-							wbuf[10] = ',"C1":['
-							wbuf[11] = string.format("%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f",
-								c1[1], c1[2], c1[3], c1[4], c1[5], c1[6], c1[7], c1[8], c1[9], c1[10], c1[11], c1[12])
-							wbuf[12] = ']}'
-							weldCount += 1
-							weldJson[weldCount] = table.concat(wbuf)
-						end
-					elseif child:IsA("WeldConstraint") then
-						if partMap[child.Part0] and partMap[child.Part1] then
-							local wbuf = {}
-							wbuf[1] = '{"ClassName":"WeldConstraint","Part0Index":'
-							wbuf[2] = tostring(partMap[child.Part0])
-							wbuf[3] = ',"Part1Index":'
-							wbuf[4] = tostring(partMap[child.Part1])
-							wbuf[5] = '}'
-							weldCount += 1
-							weldJson[weldCount] = table.concat(wbuf)
-						end
-					end
-				end
-				if weldCount > 0 then
-					push(',"Welds":[')
-					push(table.concat(weldJson, ","))
-					push(']')
-				end
-			end
-
-			push('}')
 		end
 
 		-- Footer
@@ -1134,7 +1145,6 @@ exportLuaBtn.MouseButton1Click:Connect(function()
 	local includeMeshes = toggles.Meshes.Get()
 	local includeLights = toggles.Lights.Get()
 
-	-- Pre-scan hierarchy
 	local modelMap = {}
 	local modelVars = {}
 	if hierarchy then
@@ -1188,7 +1198,6 @@ exportLuaBtn.MouseButton1Click:Connect(function()
 			push("")
 
 			if hierarchy then
-				-- Sort models by depth so parents are created first
 				table.sort(modelVars, function(a, b)
 					local da, db = 0, 0
 					local p = a.Object.Parent
@@ -1377,9 +1386,17 @@ exportLuaBtn.MouseButton1Click:Connect(function()
 				push(string.format("%s.Parent = build", var))
 			end
 			push("")
+
+			if i % 500 == 0 then
+				progressFill.Size = UDim2.new(0.15 + (i / total * 0.7), 0, 1, 0)
+				task.wait()
+			end
 		end
 
-		-- Welds only in final chunk
+		if #currentChunk > 0 then
+			table.insert(chunks, table.concat(currentChunk, "\n"))
+		end
+
 		if chunkNum == totalChunks then
 			if #constraints > 0 then
 				push("-- Weld Constraints")
