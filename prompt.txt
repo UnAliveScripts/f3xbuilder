@@ -3,7 +3,7 @@ https://raw.githubusercontent.com/UnAliveScripts/f3xbuilder/refs/heads/main/F3X_
 https://raw.githubusercontent.com/UnAliveScripts/f3xbuilder/refs/heads/main/BuildSelector_Exporter.lua
 
 🏗️ F3X BUILD LOADER — ULTIMATE PRODUCTION EDITION v3.0
-Create a single, unified LocalScript that merges the Build Loader + Build Selector/Exporter into one production-ready tool. Place in StarterPlayerScripts.
+Create a single, unified LocalScript that merges the Build Loader + Build Selector/Exporter into one production-ready tool. Place in StarterPlayerScripts. or be executable via executor
 CORE BUILDING ENGINE
 F3X API Wrapper (Complete SyncAPI Coverage)
 Auto-detect F3X/Building Tools via SyncAPI presence in Backpack/Character
