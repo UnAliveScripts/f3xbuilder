@@ -174,7 +174,7 @@ end
 function F3X:CreatePart(partType, cframe)
 	if partType == "Vehicle Seat" then partType = "VehicleSeat"
 	elseif partType == "VehicleSeat" then partType = "Vehicle Seat" end
-	return self:Invoke("CreatePart", partType or "Normal", cframe or CFrame.new(0, 10, 0), workspace)
+	return self:Invoke("CreatePart", partType or "Normal", cframe or CFrame.new(0, 5000, 0), workspace)
 end
 function F3X:SyncMove(ch) return self:Invoke("SyncMove", ch) end
 function F3X:SyncResize(ch) return self:Invoke("SyncResize", ch) end
@@ -1375,14 +1375,14 @@ end
 -- 8. PROPERTY APPLIER
 local function applyPartProperties(part, partData, targetCF, partMap)
 	local szC, colC, matC, surfC, ancC, collC, rotC = {}, {}, {}, {}, {}, {}, {}
-	if partData.Size then table.insert(szC, {Part = part, Size = parseVector3(partData.Size), CFrame = targetCF}) end
+	if partData.Size then table.insert(szC, {Part = part, Size = parseVector3(partData.Size)}) end
 	if partData.Color then table.insert(colC, {Part = part, Color = parseColor3(partData.Color)}) end
 	local md = {Part = part}
 	if partData.Material then md.Material = parseMaterial(partData.Material) end
 	if partData.Transparency ~= nil then md.Transparency = partData.Transparency end
 	if partData.Reflectance ~= nil then md.Reflectance = partData.Reflectance end
 	if next(md) then table.insert(matC, md) end
-	table.insert(ancC, {Part = part, Anchored = CONFIG.BuildAnchored or (partData.Anchored == true)})
+	table.insert(ancC, {Part = part, Anchored = false})
 	if partData.CanCollide ~= nil then table.insert(collC, {Part = part, CanCollide = partData.CanCollide}) end
 	local surfs = {}
 	if partData.TopSurface then surfs.Top = parseSurface(partData.TopSurface) end
@@ -1397,7 +1397,7 @@ local function applyPartProperties(part, partData, targetCF, partMap)
 		table.insert(rotC, {Part = part, CFrame = targetCF * CFrame.Angles(math.rad(ori.X), math.rad(ori.Y), math.rad(ori.Z))})
 	end
 
-	pcall(function() if #szC > 0 then F3XRetry("SyncMove", szC) end end)
+	pcall(function() if #szC > 0 then F3XRetry("SyncResize", szC) end end)
 	pcall(function() if #colC > 0 then F3XRetry("SyncColor", colC) end end)
 	pcall(function() if #matC > 0 then F3XRetry("SyncMaterial", matC) end end)
 	pcall(function() if #surfC > 0 then F3XRetry("SyncSurface", surfC) end end)
@@ -1505,10 +1505,11 @@ local function normalBuild(parts, total, partMap)
 		local pt = getPartType(pd.ClassName or "Part")
 		local cf = parseCFrame(pd.CFrame)
 		local part
-		local ok, res = pcall(function() part = F3X:CreatePart(pt, CFrame.new(0, 5000, 0)) return part end)
-		if not ok or not part then failed += 1 else
+		local ok, res = pcall(function() return F3XRetry("CreatePart", pt, CFrame.new(0, 5000, 0)) end)
+		if not ok or not res then failed += 1 else
+			part = res
 			partMap[i] = part
-			pcall(function() F3X:SyncMove({{Part = part, CFrame = cf}}) end)
+			pcall(function() F3XRetry("SyncMove", {{Part = part, CFrame = cf}}) end)
 			applyPartProperties(part, pd, cf, partMap)
 		end
 		if i % bs == 0 or i == total then
@@ -1526,7 +1527,6 @@ local function hyperBuild(parts, total, partMap)
 	local bd = CONFIG.BuildSpeed
 	local failed = 0
 	local completed = 0
-	local lock = false
 	local chunks = {}
 	for t = 1, tc do chunks[t] = {} end
 	for i, pd in ipairs(parts) do table.insert(chunks[((i-1) % tc) + 1], {Index = i, Data = pd}) end
@@ -1538,26 +1538,33 @@ local function hyperBuild(parts, total, partMap)
 			local pt = getPartType(pd.ClassName or "Part")
 			local cf = parseCFrame(pd.CFrame)
 			local part
-			local ok, res = pcall(function() part = F3X:CreatePart(pt, CFrame.new(0, 5000, 0)) return part end)
-			if not ok or not part then failed += 1 else
+			local ok, res = pcall(function() return F3XRetry("CreatePart", pt, CFrame.new(0, 5000, 0)) end)
+			if not ok or not res then failed += 1 else
+				part = res
 				partMap[i] = part
-				pcall(function() F3X:SyncMove({{Part = part, CFrame = cf}}) end)
+				pcall(function() F3XRetry("SyncMove", {{Part = part, CFrame = cf}}) end)
 				applyPartProperties(part, pd, cf, partMap)
 			end
 			completed += 1
 			if completed % bs == 0 or completed == total then
-				while lock do task.wait() end; lock = true
-				progressFill.Size = UDim2.new(completed / total, 0, 1, 0)
-				statusLabel.Text = string.format("🚀 HYPER %d/%d (%d fail) [t:%d]", completed, total, failed, tc)
-				lock = false
+				statusLabel.Text = string.format("HYPER %d/%d (%d fail) [t:%d]", completed, total, failed, tc)
 			end
 			if bd > 0 then task.wait(bd) end
 		end
 	end
 
 	local threads = {}
-	for t = 1, tc do threads[t] = task.spawn(function() buildChunk(chunks[t]) end) end
-	for t = 1, tc do while coroutine.status(threads[t]) ~= "dead" do task.wait(0.1) end end
+	local doneCount = 0
+	for t = 1, tc do
+		threads[t] = task.spawn(function()
+			buildChunk(chunks[t])
+			doneCount += 1
+		end)
+	end
+	while doneCount < tc do
+		progressFill.Size = UDim2.new(completed / total, 0, 1, 0)
+		task.wait(0.1)
+	end
 	return failed
 end
 
@@ -2090,6 +2097,20 @@ buildBtn.MouseButton1Click:Connect(function() local ok, err = pcall(function()
 			end
 		end
 	end
+
+	-- Post-build anchoring
+	statusLabel.Text = "Setting anchors..."
+	local ancList = {}
+	for i, pd in ipairs(parts) do
+		local part = partMap[i]
+		if part then
+			local shouldAnchor = CONFIG.BuildAnchored or (pd.Anchored == true)
+			if part.Anchored ~= shouldAnchor then
+				table.insert(ancList, {Part = part, Anchored = shouldAnchor})
+			end
+		end
+	end
+	if #ancList > 0 then pcall(function() F3XRetry("SyncAnchor", ancList) end) end
 
 	-- Post-build validation
 	local builtCount = 0
