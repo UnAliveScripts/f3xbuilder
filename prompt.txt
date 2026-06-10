@@ -1,0 +1,240 @@
+https://raw.githubusercontent.com/UnAliveScripts/f3xbuilder/refs/heads/main/F3X_BuildLoader_Ultimate.lua
+
+https://raw.githubusercontent.com/UnAliveScripts/f3xbuilder/refs/heads/main/BuildSelector_Exporter.lua
+
+🏗️ F3X BUILD LOADER — ULTIMATE PRODUCTION EDITION v3.0
+Create a single, unified LocalScript that merges the Build Loader + Build Selector/Exporter into one production-ready tool. Place in StarterPlayerScripts.
+CORE BUILDING ENGINE
+F3X API Wrapper (Complete SyncAPI Coverage)
+Auto-detect F3X/Building Tools via SyncAPI presence in Backpack/Character
+Auto-equip from Backpack if found; auto-request ;btools via chat if missing (3 retries, configurable timeout)
+All SyncAPI endpoints: CreatePart, SyncMove, SyncResize, SyncColor, SyncMaterial, SyncSurface, SyncAnchor, SyncCollision, SyncRotate, CreateMeshes, SyncMesh, CreateTextures, SyncTexture, CreateLights, SyncLighting, CreateDecorations, SyncDecorate, CreateWelds, RemoveWelds, Remove, Clone, Ungroup, SetParent, SetName, CreateGroup, SetLocked
+Exact CFrame replication: Create at CFrame.new(0, 5000, 0), then SyncMove to target CFrame
+Support all part types: Normal, Wedge, Corner, Truss, Seat, Vehicle Seat, Spawn, MeshPart
+Model/Folder hierarchy via CreateGroup + SetParent with name preservation
+Build Modes
+Normal Mode: Sequential with configurable batch size (1-1000) and delay (0-10s)
+HYPER MODE: Multi-threaded parallel building (1-32 threads) — split parts into chunks, spawn coroutines per chunk, thread-safe progress updates via simple lock flag
+Anchor Toggle: "As Original" (respect saved Anchored state) vs "Fully Anchored" (force all true)
+SURFACE & WELD SUPPORT
+Surface Tool: Smooth, Studs, Inlet, Weld, Hinge, Motor, Universal, Glue — all 6 faces (Top/Bottom/Left/Right/Front/Back)
+Weld support: Global Welds array + per-part Welds children
+Handle Weld, Motor, Motor6D (with C0/C1 CFrame serialization), WeldConstraint
+Proper Part0Index/Part1Index mapping using build-time part map
+PROPERTY REPLICATION (Full Coverage)
+Table
+Category	Properties
+BasePart	Size, Color, Material, Transparency, Reflectance, CanCollide, Anchored, CastShadow, Locked, Shape, Massless, CollisionGroupId
+Surfaces	TopSurface, BottomSurface, LeftSurface, RightSurface, FrontSurface, BackSurface
+MeshPart	MeshId, TextureID, RenderFidelity, CollisionFidelity
+Custom Physics	Density, Friction, Elasticity, FrictionWeight, ElasticityWeight
+CHILDREN SUPPORT
+Table
+Type	Properties
+Decal/Texture	Texture, Face, Transparency, Color3
+SpecialMesh	MeshType, MeshId, TextureId, Scale, Offset
+BlockMesh/CylinderMesh	Scale, Offset
+Lights	PointLight, SurfaceLight, SpotLight — Color, Brightness, Range, Shadows, Face, Angle
+Decorations	Smoke, Fire, Sparkles — Color, Size, Opacity, RiseVelocity, Brightness, Heat, SecondaryColor, SparkleColor
+Welds (child)	Part0Index, Part1Index, C0, C1
+FILE LOADING & FORMATS
+GitHub: Auto-list .json/.xml/.rbxmx files via GitHub API, download with caching to local BuildExports/ folder
+Local: Scan BuildExports/ folder for build files
+Formats: .json (primary), .xml/.rbxmx (parse Roblox XML), compressed files (LZ4/LZMA)
+Validation: Schema check + part count sanity before loading
+AUTOMATION
+Auto-teleport: Calculate build center, teleport player +30 Y with camera focus
+Auto-equip: Equip F3X from Backpack automatically
+Auto-btools: Send ;btools command, wait with timeout, retry 3×
+Smart Retry: Every F3X invoke retry up to 3× with exponential backoff
+Post-build validation: Verify built part count matches expected
+PROGRESS & VALIDATION
+Real-time progress bar with ETA calculation: (remainingParts × delay × batchSize) / threads
+Build stats: total, failed, success %, duration
+Debug logging system (toggleable)
+Per-part pcall isolation — one bad part never kills the build
+UI / UX (Modern Dark Theme)
+Draggable window with smooth TweenService animations
+Toggle button (🏗️) to show/hide
+Tabs: "Local Files" | "GitHub"
+Scrollable file lists with auto-canvas sizing
+Selected file highlight
+Status label + notification toasts (slide in/out)
+Sliders (click number to type exact value + drag):
+Build Delay: 0–10s
+Batch Size: 1–1000
+Thread Count: 1–32
+Toggles: Anchor Mode (⚓), Hyper Mode (🚀)
+Progress bar during build
+BUILD MANAGEMENT
+Undo/Redo: Store last 10 builds, ability to Remove all built parts
+History: Timestamp, name, part count, success/fail status
+Favorites: Star builds, persist to config file
+Auto-save: GitHub downloads cached locally automatically
+Export: Current selection → F3X JSON or standalone Lua script
+Build Diff: Compare two builds side-by-side
+Preview: Ghost/outline preview before building
+INTEGRATED EXPORTER
+Drag-select: Marquee box selection in workspace
+Ctrl+click: Add/remove individual parts
+Visual boxes: Blue selection boxes (limit 500 for performance)
+Toggles: Preserve Hierarchy, Include Welds, Include Decals, Include Meshes, Include Lights
+Export formats: F3X JSON (streaming via appendfile) + Lua rebuild script (chunked for 10K+ parts)
+Object pooling: Recycle UI list items instead of destroy/create
+DATA FORMAT
+JSON
+{
+  "BuildName": "string", "PlaceId": number, "Timestamp": "string", "PartCount": number,
+  "Parts": [{
+    "Index": number, "ClassName": "Part|WedgePart|...", "Name": "string",
+    "CFrame": [12 floats], "Size": [3 floats], "Color": [3 ints],
+    "Material": "Enum.Material.Name", "Transparency": float, "Reflectance": float,
+    "CanCollide": bool, "Anchored": bool, "CastShadow": bool, "Locked": bool,
+    "Shape": "Enum.PartType.Name", "Massless": bool, "CollisionGroupId": number,
+    "TopSurface": "Enum.SurfaceType.Name", "BottomSurface": "...", "LeftSurface": "...", "RightSurface": "...", "FrontSurface": "...", "BackSurface": "...",
+    "CustomPhysicalProperties": {"Density": float, "Friction": float, "Elasticity": float, "FrictionWeight": float, "ElasticityWeight": float},
+    "MeshId": "string", "TextureID": "string", "RenderFidelity": "...", "CollisionFidelity": "...",
+    "ParentName": "string", "ParentClass": "Model|Folder",
+    "Children": [...], "Welds": [...]
+  }],
+  "Models": {"ref": {"ClassName":"Model","Name":"string"}},
+  "Welds": [{"Part0Index":number,"Part1Index":number,"ClassName":"...","C0":[12],"C1":[12]}]
+}
+ADDITIONAL FEATURES (Quality of Life)
+Table
+Feature	Description
+Build Preview	Ghost/outline preview before placing
+Offset/Rotate/Scale	X/Y/Z offset input, 90° rotation increments, 0.1x–10x scale
+Quick Build	F1–F5 hotkeys for favorite builds
+Build Queue	Queue multiple builds to run sequentially
+Collision Check	Verify build area is clear before starting
+Clipboard	Copy JSON to clipboard / paste from clipboard
+Search & Filter	Search by name, filter by part count/date
+Auto-Anchor After	Force anchor all parts post-build
+Sound FX	Audio feedback for start/progress/complete
+Part Counter	Real-time workspace part count vs limit
+PERFORMANCE & BUG PREVENTION (Critical)
+Memory: Object pool UI elements, clear large tables after use
+Coroutine safety: All F3X in pcall, never yield in critical paths
+Rate limiting: Respect Roblox limits, configurable delays
+Large builds: Stream processing 10K+ parts, chunked file I/O
+Error isolation: Per-part pcall — one bad part never kills export/build
+F3X validation: Check tool exists before every invoke, re-init if lost
+Network resilience: Retry HTTP with exponential backoff
+UI responsive: Heavy work in coroutines, never block render
+Input sanitization: Clamp all numeric values, validate text
+Cleanup: Remove temp instances, disconnect unused events
+CODE STRUCTURE
+lua
+-- 1. Services & Constants
+-- 2. Config table
+-- 3. F3X API wrapper (full SyncAPI)
+-- 4. Data parsers (CFrame, Vector3, Color3, Enums)
+-- 5. File I/O (GitHub API, local, compression)
+-- 6. Build engine (normal + hyper)
+-- 7. Property applier (comprehensive)
+-- 8. UI system (modern dark, draggable)
+-- 9. Selection system (drag box, click, Ctrl)
+-- 10. Export system (JSON + Lua streaming)
+-- 11. Automation (teleport, btools, equip)
+-- 12. Progress & validation
+-- 13. History, favorites, templates
+-- 14. Main initialization
+
+RULES
+No bloat — every feature must have a clear purpose
+
+--------------------------------------------------------------------------------------------
+
+
+Table
+Operation	F3X Method	
+Create Part	F3X:CreatePart(partType, CFrame.new(0,5000,0), workspace)	Instance.new("Part")
+Position	F3X:SyncMove({{Part=p, CFrame=targetCF}})	part.CFrame = ...
+Size	F3X:SyncResize({{Part=p, Size=..., CFrame=...}})	part.Size = ...
+Color	F3X:SyncColor({{Part=p, Color=...}})	part.Color = ...
+Material	F3X:SyncMaterial({{Part=p, Material=..., Transparency=..., Reflectance=...}})	part.Material = ...
+Surfaces	F3X:SyncSurface({{Part=p, Surfaces={Top=..., Bottom=...}}})	part.TopSurface = ...
+Anchor	F3X:SyncAnchor({{Part=p, Anchored=...}})	part.Anchored = ...
+Collision	F3X:SyncCollision({{Part=p, CanCollide=...}})	part.CanCollide = ...
+Rotation	F3X:SyncRotate({{Part=p, CFrame=...}})	part.Orientation = ...
+Mesh	F3X:CreateMeshes({p}) then F3X:SyncMesh({{Part=p, MeshType=..., MeshId=...}})	Instance.new("SpecialMesh", p)
+Texture	F3X:CreateTextures({{Part=p, Face=..., TextureType="Decal"}}) then F3X:SyncTexture(...)	Instance.new("Decal", p)
+Light	F3X:CreateLights({{Part=p, LightType="PointLight"}}) then F3X:SyncLighting(...)	Instance.new("PointLight", p)
+Decoration	F3X:CreateDecorations({{Part=p, DecorationType="Smoke"}}) then F3X:SyncDecorate(...)	Instance.new("Smoke", p)
+Weld	F3X:CreateWelds({p0}, p1)	Instance.new("Weld", p0)
+Parent	F3X:SetParent({parts}, parent)	part.Parent = ...
+Name	F3X:SetName({parts}, "name")	part.Name = ...
+Group	F3X:CreateGroup("Model", workspace, {})	Instance.new("Model")
+Lock	F3X:SetLocked({parts}, true/false)	part.Locked = ...
+Remove	F3X:Remove({parts})	part:Destroy()
+
+🎯 F3X PART TYPE STRINGS
+Map ClassName → F3X partType argument exactly:
+Table
+ClassName	F3X partType
+Part	"Normal"
+WedgePart	"Wedge"
+CornerWedgePart	"Corner"
+TrussPart	"Truss"
+Seat	"Seat"
+VehicleSeat	"Vehicle Seat"
+SpawnLocation	"Spawn"
+MeshPart	"Normal"
+Create at CFrame.new(0, 5000, 0) first, then SyncMove to exact target. Never pass the target CFrame directly to CreatePart — F3X placement can  be imprecise. all must be prefect
+
+🔄 F3X STATE RESILIENCE
+lua
+-- Before EVERY batch of operations:
+if not F3X:Init() then
+    -- Tool was unequipped or lost
+    notify("F3X tool lost — re-equipping...")
+    equipBuildingTool()
+    task.wait(0.5)
+    if not F3X:Init() then
+        error("F3X tool unavailable — build paused")
+    end
+end
+If tool is unequipped mid-build: pause, re-equip, re-init, resume from last successful part
+If InvokeServer returns nil or errors: retry 3× with 0.2s backoff, then mark part as failed and continue
+After every BatchSize parts: validate F3X tool still exists in Character
+✅ BUILD VALIDATION (F3X-CENTRIC)
+After build completes:
+lua
+-- Count parts that were successfully created via F3X
+local builtCount = 0
+for i, part in pairs(partMap) do
+    if part and part:FindFirstAncestorOfClass("DataModel") then
+        builtCount += 1
+    end
+end
+
+local expected = #buildData.Parts
+if builtCount < expected then
+    notify(string.format("⚠️ Validation failed: %d/%d parts exist", builtCount, expected))
+    -- Offer to retry failed parts
+else
+    notify(string.format("✅ Validation passed: all %d parts confirmed in workspace", builtCount))
+end
+[ ] CreatePart is the only part creation method used
+[ ] SyncMove is called immediately after every CreatePart before any other ops
+[ ] SyncResize handles all size changes
+[ ] SyncColor handles all color changes
+[ ] SyncMaterial handles Material + Transparency + Reflectance
+[ ] SyncSurface handles all 6 face surfaces
+[ ] SyncAnchor handles Anchored state
+[ ] SyncCollision handles CanCollide
+[ ] SyncRotate handles Orientation/CFrame rotation adjustments
+[ ] CreateMeshes + SyncMesh handle all mesh children
+[ ] CreateTextures + SyncTexture handle Decals/Textures
+[ ] CreateLights + SyncLighting handle all lights
+[ ] CreateDecorations + SyncDecorate handle Smoke/Fire/Sparkles
+[ ] CreateWelds is the only weld creation method
+[ ] SetParent is the only parenting method
+[ ] SetName is the only renaming method
+[ ] CreateGroup is the only model/folder creation method
+[ ] SetLocked is the only locking method
+[ ] Remove is the only deletion method
+[ ] Direct property assignment is limited to: CustomPhysicalProperties, Massless, CollisionGroupId, CastShadow
+[ ] Tool state is validated before every batch
+[ ] Failed invocations retry 3× before marking part failed
