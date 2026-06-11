@@ -1616,6 +1616,8 @@ local function applyPartProperties(part, partData, targetCF, partMap)
 	if partData.Orientation then
 		local ori = parseVector3(partData.Orientation)
 		table.insert(rotC, {Part = part, CFrame = targetCF * CFrame.Angles(math.rad(ori.X), math.rad(ori.Y), math.rad(ori.Z))})
+	elseif CONFIG.BuildRot90 ~= 0 then
+		table.insert(rotC, {Part = part, CFrame = targetCF * CFrame.Angles(0, math.rad(CONFIG.BuildRot90), 0)})
 	end
 
 	pcall(function() if #szC > 0 then F3XRetry("SyncResize", szC) end end)
@@ -1716,6 +1718,7 @@ local function applyPartProperties(part, partData, targetCF, partMap)
 				elseif (cd.ClassName == "Weld" or cd.ClassName == "WeldConstraint" or cd.ClassName == "Motor" or cd.ClassName == "Motor6D") and cd.Part0Index and cd.Part1Index and partMap then
 					local p0, p1 = partMap[cd.Part0Index], partMap[cd.Part1Index]
 					if p0 and p1 then pcall(function()
+						pcall(function() F3XRetry("RemoveWelds", {{p0}, p1}) end)
 						local weldObj = F3XRetry("CreateWelds", {p0}, p1)
 					if not weldObj or typeof(weldObj) ~= "Instance" then
 						local containers = {p1, p0, p1.Parent, p0.Parent}
@@ -1753,9 +1756,6 @@ local function normalBuild(parts, total, partMap)
 		if CONFIG.BuildOffset and CONFIG.BuildOffset.Magnitude > 0 then
 			cf = cf * CFrame.new(CONFIG.BuildOffset)
 		end
-		if CONFIG.BuildRot90 and CONFIG.BuildRot90 ~= 0 then
-			cf = cf * CFrame.Angles(0, math.rad(CONFIG.BuildRot90), 0)
-		end
 		local part
 		local ok, res = pcall(function() return F3XRetry("CreatePart", pt, CFrame.new(0, 5000, 0)) end)
 		if not ok or not res then failed += 1 else
@@ -1791,9 +1791,6 @@ local function hyperBuild(parts, total, partMap)
 			local cf = parseCFrame(pd.CFrame)
 			if CONFIG.BuildOffset and CONFIG.BuildOffset.Magnitude > 0 then
 				cf = cf * CFrame.new(CONFIG.BuildOffset)
-			end
-			if CONFIG.BuildRot90 and CONFIG.BuildRot90 ~= 0 then
-				cf = cf * CFrame.Angles(0, math.rad(CONFIG.BuildRot90), 0)
 			end
 			local part
 			local ok, res = pcall(function() return F3XRetry("CreatePart", pt, CFrame.new(0, 5000, 0)) end)
@@ -2355,6 +2352,7 @@ local function doBuild(name, data, isQueueItem)
 			if wd.Part0Index and wd.Part1Index then
 				local p0, p1 = partMap[wd.Part0Index], partMap[wd.Part1Index]
 				if p0 and p1 then pcall(function()
+					pcall(function() F3XRetry("RemoveWelds", {{p0}, p1}) end)
 					local weldObj = F3XRetry("CreateWelds", {p0}, p1)
 					if not weldObj or typeof(weldObj) ~= "Instance" then
 						local containers = {p1, p0, p1.Parent, p0.Parent}
