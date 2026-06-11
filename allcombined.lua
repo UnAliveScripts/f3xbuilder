@@ -1486,9 +1486,22 @@ local function applyPartProperties(part, partData, targetCF, partMap)
 					if cd.SecondaryColor then dc.SecondaryColor = parseColor3(cd.SecondaryColor) end
 					if cd.SparkleColor then dc.SparkleColor = parseColor3(cd.SparkleColor) end
 					F3XRetry("SyncDecorate", {dc})
-				elseif (cd.ClassName == "Weld" or cd.ClassName == "WeldConstraint") and cd.Part0Index and cd.Part1Index and partMap then
+				elseif (cd.ClassName == "Weld" or cd.ClassName == "WeldConstraint" or cd.ClassName == "Motor" or cd.ClassName == "Motor6D") and cd.Part0Index and cd.Part1Index and partMap then
 					local p0, p1 = partMap[cd.Part0Index], partMap[cd.Part1Index]
-					if p0 and p1 then pcall(function() F3XRetry("CreateWelds", {p0}, p1) end) end
+					if p0 and p1 then pcall(function()
+						local weldObj = F3XRetry("CreateWelds", {p0}, p1)
+						if not weldObj or typeof(weldObj) ~= "Instance" then
+							for _, child in ipairs(p0:GetChildren()) do
+								if (child:IsA("Weld") or child:IsA("Motor") or child:IsA("Motor6D")) and child.Part1 == p1 then
+									weldObj = child; break
+								end
+							end
+						end
+						if weldObj and typeof(weldObj) == "Instance" then
+							if cd.C0 then pcall(function() weldObj.C0 = parseCFrame(cd.C0) end) end
+							if cd.C1 then pcall(function() weldObj.C1 = parseCFrame(cd.C1) end) end
+						end
+					end) end
 				end
 			end)
 		end
@@ -2093,7 +2106,25 @@ buildBtn.MouseButton1Click:Connect(function() local ok, err = pcall(function()
 		for _, wd in ipairs(selectedBuildData.Welds) do
 			if wd.Part0Index and wd.Part1Index then
 				local p0, p1 = partMap[wd.Part0Index], partMap[wd.Part1Index]
-				if p0 and p1 then pcall(function() F3X:CreateWelds({p0}, p1) end) end
+				if p0 and p1 then pcall(function()
+					local weldObj = F3XRetry("CreateWelds", {p0}, p1)
+					if not weldObj or typeof(weldObj) ~= "Instance" then
+						for _, child in ipairs(p0:GetChildren()) do
+							if (child:IsA("Weld") or child:IsA("Motor") or child:IsA("Motor6D")) and child.Part1 == p1 then
+								weldObj = child; break
+							end
+						end
+					end
+					if weldObj and typeof(weldObj) == "Instance" then
+						if wd.C0 then pcall(function() weldObj.C0 = parseCFrame(wd.C0) end) end
+						if wd.C1 then pcall(function() weldObj.C1 = parseCFrame(wd.C1) end) end
+						if wd.ClassName == "Motor6D" then
+							if wd.MaxVelocity then pcall(function() weldObj.MaxVelocity = wd.MaxVelocity end) end
+							if wd.CurrentAngle then pcall(function() weldObj.CurrentAngle = wd.CurrentAngle end) end
+							if wd.DesiredAngle then pcall(function() weldObj.DesiredAngle = wd.DesiredAngle end) end
+						end
+					end
+				end) end
 			end
 		end
 	end
