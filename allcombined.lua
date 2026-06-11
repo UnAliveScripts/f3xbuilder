@@ -113,7 +113,42 @@ local function dprint(...)
 	if CONFIG.Debug then print("[F3X System]", ...) end
 end
 
--- 3. F3X API WRAPPER (Full SyncAPI Coverage)
+-- 3. CONFIG PERSISTENCE
+local CONFIG_FILE = CONFIG.LocalFolder .. "/build_config.json"
+
+local function saveConfig()
+	if not hasFileAccess then return end
+	local configData = {
+		BuildAnchored = CONFIG.BuildAnchored,
+		BuildSpeed = CONFIG.BuildSpeed,
+		BatchSize = CONFIG.BatchSize,
+		HyperThreads = CONFIG.HyperThreads,
+		LocalFolder = CONFIG.LocalFolder,
+		GitHubRepo = CONFIG.GitHubRepo,
+	}
+	local ok, json = pcall(function() return HttpService:JSONEncode(configData) end)
+	if ok then pcall(function() writefile(CONFIG_FILE, json) end) end
+end
+
+local function loadConfig()
+	if not hasFileAccess then return end
+	local ok, content = pcall(function() return readfile(CONFIG_FILE) end)
+	if ok and content and #content > 0 then
+		local parseOk, data = pcall(function() return HttpService:JSONDecode(content) end)
+		if parseOk and type(data) == "table" then
+			if data.BuildAnchored ~= nil then CONFIG.BuildAnchored = data.BuildAnchored end
+			if data.BuildSpeed ~= nil then CONFIG.BuildSpeed = data.BuildSpeed end
+			if data.BatchSize ~= nil then CONFIG.BatchSize = data.BatchSize end
+			if data.HyperThreads ~= nil then CONFIG.HyperThreads = data.HyperThreads end
+			if data.LocalFolder then CONFIG.LocalFolder = data.LocalFolder end
+			if data.GitHubRepo then CONFIG.GitHubRepo = data.GitHubRepo end
+		end
+	end
+end
+
+loadConfig()
+
+-- 4. F3X API WRAPPER (Full SyncAPI Coverage)
 local F3X = {}
 F3X._tool = nil
 F3X._syncAPI = nil
@@ -217,7 +252,40 @@ function F3X:SetLocked(items, locked)
 	return self:Invoke("SetLocked", items, locked)
 end
 
--- 4. DATA PARSERS
+-- Config persistence
+local CONFIG_FILE = SAVE_FOLDER .. "/build_config.json"
+
+local function saveConfig()
+	if not hasFileAccess then return end
+	local configData = {
+		BuildAnchored = CONFIG.BuildAnchored,
+		BuildSpeed = CONFIG.BuildSpeed,
+		BatchSize = CONFIG.BatchSize,
+		HyperThreads = CONFIG.HyperThreads,
+		LocalFolder = CONFIG.LocalFolder,
+		GitHubRepo = CONFIG.GitHubRepo,
+	}
+	local ok, json = pcall(function() return HttpService:JSONEncode(configData) end)
+	if ok then pcall(function() writefile(CONFIG_FILE, json) end) end
+end
+
+local function loadConfig()
+	if not hasFileAccess then return end
+	local ok, content = pcall(function() return readfile(CONFIG_FILE) end)
+	if ok and content and #content > 0 then
+		local parseOk, data = pcall(function() return HttpService:JSONDecode(content) end)
+		if parseOk and type(data) == "table" then
+			if data.BuildAnchored ~= nil then CONFIG.BuildAnchored = data.BuildAnchored end
+			if data.BuildSpeed ~= nil then CONFIG.BuildSpeed = data.BuildSpeed end
+			if data.BatchSize ~= nil then CONFIG.BatchSize = data.BatchSize end
+			if data.HyperThreads ~= nil then CONFIG.HyperThreads = data.HyperThreads end
+			if data.LocalFolder then CONFIG.LocalFolder = data.LocalFolder end
+			if data.GitHubRepo then CONFIG.GitHubRepo = data.GitHubRepo end
+		end
+	end
+end
+
+loadConfig()
 local function parseCFrame(data)
 	if not data then return CFrame.new(0, 10, 0) end
 	if typeof(data) == "CFrame" then return data end
@@ -317,7 +385,7 @@ local function fmtVal(v)
 	elseif t == "Vector3" then return fmtV3(v)
 	elseif t == "Color3" then return fmtC3(v)
 	elseif t == "CFrame" then return fmtCF(v)
-	elseif t == "EnumItem" then return tostring(v)
+	elseif t == "EnumItem" then return tostring(v):gsub("Enum%.%w+%.", "")
 	else return string.format("%q", tostring(v)) end
 end
 
@@ -629,10 +697,53 @@ hyperToggleBtn.MouseButton1Click:Connect(function()
 	notify(CONFIG.HyperMode and "HYPER MODE enabled!" or "Normal mode enabled.")
 end)
 
+-- Second toggle row
+local bToggleFrame2 = Instance.new("Frame")
+bToggleFrame2.Size = UDim2.new(1, 0, 0, 28)
+bToggleFrame2.Position = UDim2.new(0, 0, 0, 36)
+bToggleFrame2.BackgroundTransparency = 1
+bToggleFrame2.Parent = buildCtrlFrame
+
+local bToggleLayout2 = Instance.new("UIListLayout")
+bToggleLayout2.FillDirection = Enum.FillDirection.Horizontal
+bToggleLayout2.Padding = UDim.new(0, 6)
+bToggleLayout2.Parent = bToggleFrame2
+
+local autoAnchorBtn = Instance.new("TextButton")
+autoAnchorBtn.Size = UDim2.new(0.5, -2, 1, 0)
+autoAnchorBtn.BackgroundColor3 = Color3.fromRGB(40, 50, 60)
+autoAnchorBtn.Text = "🔗 Auto-Anchor: ON"
+autoAnchorBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+autoAnchorBtn.TextSize = 11
+autoAnchorBtn.Font = Enum.Font.GothamBold
+Instance.new("UICorner", autoAnchorBtn).CornerRadius = UDim.new(0, 6)
+autoAnchorBtn.Parent = bToggleFrame2
+autoAnchorBtn.MouseButton1Click:Connect(function()
+	CONFIG.BuildAnchored = not CONFIG.BuildAnchored
+	autoAnchorBtn.Text = CONFIG.BuildAnchored and "🔗 Auto-Anchor: ON" or "🔗 Auto-Anchor: OFF"
+	autoAnchorBtn.BackgroundColor3 = CONFIG.BuildAnchored and Color3.fromRGB(0, 130, 80) or Color3.fromRGB(40, 50, 60)
+	anchorToggleBtn.Text = CONFIG.BuildAnchored and "⚓ Fully Anchored" or "⚓ As Original"
+	anchorToggleBtn.BackgroundColor3 = CONFIG.BuildAnchored and Color3.fromRGB(0, 130, 80) or Color3.fromRGB(60, 40, 80)
+end)
+
+local saveCfgBtn = Instance.new("TextButton")
+saveCfgBtn.Size = UDim2.new(0.5, -2, 1, 0)
+saveCfgBtn.BackgroundColor3 = Color3.fromRGB(0, 100, 180)
+saveCfgBtn.Text = "💾 Save Config"
+saveCfgBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+saveCfgBtn.TextSize = 11
+saveCfgBtn.Font = Enum.Font.GothamBold
+Instance.new("UICorner", saveCfgBtn).CornerRadius = UDim.new(0, 6)
+saveCfgBtn.Parent = bToggleFrame2
+saveCfgBtn.MouseButton1Click:Connect(function()
+	saveConfig()
+	notify("Config saved!")
+end)
+
 -- Sliders
 local slidersFrame = Instance.new("Frame")
 slidersFrame.Size = UDim2.new(1, 0, 0, 126)
-slidersFrame.Position = UDim2.new(0, 0, 0, 36)
+slidersFrame.Position = UDim2.new(0, 0, 0, 68)
 slidersFrame.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
 slidersFrame.BorderSizePixel = 0
 Instance.new("UICorner", slidersFrame).CornerRadius = UDim.new(0, 8)
@@ -761,6 +872,109 @@ end
 local speedSlider = makeSliderRow(slidersFrame, 20, "Delay:", Color3.fromRGB(0, 200, 255), 0, 10, 0.005, "float", "sec")
 local batchSlider = makeSliderRow(slidersFrame, 48, "Batch:", Color3.fromRGB(0, 255, 100), 1, 1000, 10, "int", "prts")
 local threadSlider = makeSliderRow(slidersFrame, 76, "Thread:", Color3.fromRGB(255, 100, 50), 1, 32, 4, "int", "par")
+
+-- Offset/Rotate/Scale controls
+local offsetFrame = Instance.new("Frame")
+offsetFrame.Size = UDim2.new(1, 0, 0, 42)
+offsetFrame.Position = UDim2.new(0, 0, 1, -42)
+offsetFrame.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
+offsetFrame.BorderSizePixel = 0
+Instance.new("UICorner", offsetFrame).CornerRadius = UDim.new(0, 8)
+offsetFrame.Parent = buildCtrlFrame
+
+local offsetLabel = Instance.new("TextLabel")
+offsetLabel.Size = UDim2.new(0, 28, 1, 0)
+offsetLabel.Position = UDim2.new(0, 4, 0, 0)
+offsetLabel.BackgroundTransparency = 1
+offsetLabel.Text = "XYZ:"
+offsetLabel.TextColor3 = Color3.fromRGB(180, 180, 190)
+offsetLabel.TextSize = 10
+offsetLabel.Font = Enum.Font.GothamBold
+offsetLabel.TextXAlignment = Enum.TextXAlignment.Left
+offsetLabel.Parent = offsetFrame
+
+local offsetBoxes = {}
+for _, axis in ipairs({"X", "Y", "Z"}) do
+	local box = Instance.new("TextBox")
+	box.Size = UDim2.new(0, 42, 0, 18)
+	box.Position = UDim2.new(0, #axis == 1 and 32 or (#axis == 2 and 78 or 124), 0.5, -9)
+	box.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+	box.Text = "0"
+	box.TextColor3 = Color3.fromRGB(200, 200, 210)
+	box.PlaceholderColor3 = Color3.fromRGB(100, 100, 110)
+	box.TextSize = 10
+	box.Font = Enum.Font.GothamBold
+	box.ClearTextOnFocus = false
+	Instance.new("UICorner", box).CornerRadius = UDim.new(0, 4)
+	box.Parent = offsetFrame
+	offsetBoxes[axis] = box
+end
+
+local rot90Btn = Instance.new("TextButton")
+rot90Btn.Size = UDim2.new(0, 28, 0, 22)
+rot90Btn.Position = UDim2.new(0, 172, 0.5, -11)
+rot90Btn.BackgroundColor3 = Color3.fromRGB(40, 50, 60)
+rot90Btn.Text = "↻"
+rot90Btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+rot90Btn.TextSize = 12
+rot90Btn.Font = Enum.Font.GothamBold
+Instance.new("UICorner", rot90Btn).CornerRadius = UDim.new(0, 4)
+rot90Btn.Parent = offsetFrame
+
+local scaleBox = Instance.new("TextBox")
+scaleBox.Size = UDim2.new(0, 50, 0, 18)
+scaleBox.Position = UDim2.new(0, 206, 0.5, -9)
+scaleBox.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+scaleBox.Text = "1.0"
+scaleBox.TextColor3 = Color3.fromRGB(200, 200, 210)
+scaleBox.PlaceholderColor3 = Color3.fromRGB(100, 100, 110)
+scaleBox.TextSize = 10
+scaleBox.Font = Enum.Font.GothamBold
+scaleBox.ClearTextOnFocus = false
+Instance.new("UICorner", scaleBox).CornerRadius = UDim.new(0, 4)
+scaleBox.Parent = offsetFrame
+
+local scaleLabel = Instance.new("TextLabel")
+scaleLabel.Size = UDim2.new(0, 20, 1, 0)
+scaleLabel.Position = UDim2.new(0, 260, 0, 0)
+scaleLabel.BackgroundTransparency = 1
+scaleLabel.Text = "×"
+scaleLabel.TextColor3 = Color3.fromRGB(150, 150, 160)
+scaleLabel.TextSize = 10
+scaleLabel.Font = Enum.Font.Gotham
+scaleLabel.TextXAlignment = Enum.TextXAlignment.Left
+scaleLabel.Parent = offsetFrame
+
+CONFIG.BuildOffset = Vector3.new(0, 0, 0)
+CONFIG.BuildScale = 1
+CONFIG.BuildRot90 = 0
+
+local function updateOffset()
+	local x = tonumber(offsetBoxes.X.Text) or 0
+	local y = tonumber(offsetBoxes.Y.Text) or 0
+	local z = tonumber(offsetBoxes.Z.Text) or 0
+	CONFIG.BuildOffset = Vector3.new(x, y, z)
+end
+for _, axis in ipairs({"X", "Y", "Z"}) do
+	offsetBoxes[axis].FocusLost:Connect(function()
+		updateOffset()
+	end)
+end
+
+rot90Btn.MouseButton1Click:Connect(function()
+	CONFIG.BuildRot90 = (CONFIG.BuildRot90 + 90) % 360
+	rot90Btn.Text = CONFIG.BuildRot90 == 0 and "↻" or string.format("↻%d°", CONFIG.BuildRot90)
+	notify("Rotation: " .. CONFIG.BuildRot90 .. "°")
+end)
+
+scaleBox.FocusLost:Connect(function()
+	local v = tonumber(scaleBox.Text)
+	if v and v >= 0.1 and v <= 10 then
+		CONFIG.BuildScale = v
+	else
+		scaleBox.Text = tostring(CONFIG.BuildScale)
+	end
+end)
 
 local buildBtn = Instance.new("TextButton")
 buildBtn.Size = UDim2.new(1, 0, 0, 40)
@@ -1375,7 +1589,13 @@ end
 -- 8. PROPERTY APPLIER
 local function applyPartProperties(part, partData, targetCF, partMap)
 	local szC, colC, matC, surfC, ancC, collC, rotC = {}, {}, {}, {}, {}, {}, {}
-	if partData.Size then table.insert(szC, {Part = part, Size = parseVector3(partData.Size)}) end
+	if partData.Size then
+		local sz = parseVector3(partData.Size)
+		if CONFIG.BuildScale and CONFIG.BuildScale ~= 1 then
+			sz = sz * CONFIG.BuildScale
+		end
+		table.insert(szC, {Part = part, Size = sz})
+	end
 	if partData.Color then table.insert(colC, {Part = part, Color = parseColor3(partData.Color)}) end
 	local md = {Part = part}
 	if partData.Material then md.Material = parseMaterial(partData.Material) end
@@ -1405,8 +1625,14 @@ local function applyPartProperties(part, partData, targetCF, partMap)
 	pcall(function() if #collC > 0 then F3XRetry("SyncCollision", collC) end end)
 	pcall(function() if #rotC > 0 then F3XRetry("SyncRotate", rotC) end end)
 
-	if partData.Name then pcall(function() F3XRetry("SetName", {part}, partData.Name) end) end
-	if partData.Locked ~= nil then pcall(function() F3XRetry("SetLocked", {part}, partData.Locked) end) end
+	if partData.Name or partData.Locked ~= nil then
+		local nameBatch = {}
+		local lockBatch = {}
+		if partData.Name then table.insert(nameBatch, part) end
+		if partData.Locked ~= nil then table.insert(lockBatch, {Part = part, Locked = partData.Locked}) end
+		if #nameBatch > 0 then pcall(function() F3XRetry("SetName", nameBatch, partData.Name) end) end
+		if #lockBatch > 0 then pcall(function() F3XRetry("SetLocked", lockBatch) end) end
+	end
 
 	if partData.CastShadow ~= nil then part.CastShadow = partData.CastShadow end
 	if partData.Shape then pcall(function() part.Shape = parseShape(partData.Shape) end) end
@@ -1490,18 +1716,20 @@ local function applyPartProperties(part, partData, targetCF, partMap)
 					local p0, p1 = partMap[cd.Part0Index], partMap[cd.Part1Index]
 					if p0 and p1 then pcall(function()
 						local weldObj = F3XRetry("CreateWelds", {p0}, p1)
-						if not weldObj or typeof(weldObj) ~= "Instance" then
-							local function findWeld(container)
-								for _, child in ipairs(container:GetChildren()) do
+					if not weldObj or typeof(weldObj) ~= "Instance" then
+						local containers = {p0, p1, p0.Parent, p1.Parent, workspace}
+						for _, ctn in ipairs(containers) do
+							if ctn then
+								for _, child in ipairs(ctn:GetChildren()) do
 									if (child:IsA("Weld") or child:IsA("Motor") or child:IsA("Motor6D")) and child.Part0 == p0 and child.Part1 == p1 then
-										return child
+										weldObj = child; break
 									end
 								end
-								return nil
+								if weldObj and typeof(weldObj) == "Instance" then break end
 							end
-							weldObj = findWeld(p0) or findWeld(p1) or findWeld(workspace)
 						end
-						if weldObj and typeof(weldObj) == "Instance" and (cd.ClassName ~= "WeldConstraint") then
+					end
+					if weldObj and typeof(weldObj) == "Instance" and (cd.ClassName ~= "WeldConstraint") then
 							if cd.C0 then pcall(function() weldObj.C0 = parseCFrame(cd.C0) end) end
 							if cd.C1 then pcall(function() weldObj.C1 = parseCFrame(cd.C1) end) end
 						end
@@ -1521,6 +1749,12 @@ local function normalBuild(parts, total, partMap)
 		if not F3X:ValidateTool() then break end
 		local pt = getPartType(pd.ClassName or "Part")
 		local cf = parseCFrame(pd.CFrame)
+		if CONFIG.BuildOffset and CONFIG.BuildOffset.Magnitude > 0 then
+			cf = cf * CFrame.new(CONFIG.BuildOffset)
+		end
+		if CONFIG.BuildRot90 and CONFIG.BuildRot90 ~= 0 then
+			cf = cf * CFrame.Angles(0, math.rad(CONFIG.BuildRot90), 0)
+		end
 		local part
 		local ok, res = pcall(function() return F3XRetry("CreatePart", pt, CFrame.new(0, 5000, 0)) end)
 		if not ok or not res then failed += 1 else
@@ -1554,6 +1788,12 @@ local function hyperBuild(parts, total, partMap)
 			if not F3X:ValidateTool() then break end
 			local pt = getPartType(pd.ClassName or "Part")
 			local cf = parseCFrame(pd.CFrame)
+			if CONFIG.BuildOffset and CONFIG.BuildOffset.Magnitude > 0 then
+				cf = cf * CFrame.new(CONFIG.BuildOffset)
+			end
+			if CONFIG.BuildRot90 and CONFIG.BuildRot90 ~= 0 then
+				cf = cf * CFrame.Angles(0, math.rad(CONFIG.BuildRot90), 0)
+			end
 			local part
 			local ok, res = pcall(function() return F3XRetry("CreatePart", pt, CFrame.new(0, 5000, 0)) end)
 			if not ok or not res then failed += 1 else
@@ -2092,12 +2332,13 @@ buildBtn.MouseButton1Click:Connect(function() local ok, err = pcall(function()
 	local parentGroups = {}
 	for i, pd in ipairs(parts) do
 		local part = partMap[i]
-		if part and pd.ParentName and pd.ParentName ~= "workspace" then
-			local target = modelMap[pd.ParentName]
-			if target then
-				if not parentGroups[target] then parentGroups[target] = {} end
-				table.insert(parentGroups[target], part)
+		if part then
+			local target = workspace
+			if pd.ParentName and pd.ParentName ~= "workspace" then
+				target = modelMap[pd.ParentName] or workspace
 			end
+			if not parentGroups[target] then parentGroups[target] = {} end
+			table.insert(parentGroups[target], part)
 		end
 	end
 	if next(parentGroups) then
@@ -2113,15 +2354,17 @@ buildBtn.MouseButton1Click:Connect(function() local ok, err = pcall(function()
 				if p0 and p1 then pcall(function()
 					local weldObj = F3XRetry("CreateWelds", {p0}, p1)
 					if not weldObj or typeof(weldObj) ~= "Instance" then
-						local function findWeld(container)
-							for _, child in ipairs(container:GetChildren()) do
-								if (child:IsA("Weld") or child:IsA("Motor") or child:IsA("Motor6D")) and child.Part0 == p0 and child.Part1 == p1 then
-									return child
+						local containers = {p0, p1, p0.Parent, p1.Parent, workspace}
+						for _, ctn in ipairs(containers) do
+							if ctn then
+								for _, child in ipairs(ctn:GetChildren()) do
+									if (child:IsA("Weld") or child:IsA("Motor") or child:IsA("Motor6D")) and child.Part0 == p0 and child.Part1 == p1 then
+										weldObj = child; break
+									end
 								end
+								if weldObj and typeof(weldObj) == "Instance" then break end
 							end
-							return nil
 						end
-						weldObj = findWeld(p0) or findWeld(p1) or findWeld(workspace)
 					end
 					if weldObj and typeof(weldObj) == "Instance" and (wd.ClassName or "Weld") ~= "WeldConstraint" then
 						if wd.C0 then pcall(function() weldObj.C0 = parseCFrame(wd.C0) end) end
