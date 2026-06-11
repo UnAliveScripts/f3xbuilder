@@ -1342,16 +1342,17 @@ local function applyPartProperties(part, partData, cf, partMap)
 	end
 
 	local className = partData.ClassName or "Part"
-	if className == "MeshPart" and (partData.MeshId or partData.TextureID or partData.RenderFidelity) then
-		pcall(function()
-			F3XRetry("CreateMeshes", {part})
-			local mc = {Part = part}
-			if partData.MeshId and isValidAssetUrl(partData.MeshId) then mc.MeshId = partData.MeshId end
-			if partData.TextureID and isValidAssetUrl(partData.TextureID) then mc.TextureId = partData.TextureID end
-			if partData.RenderFidelity then mc.RenderFidelity = partData.RenderFidelity end
-			if partData.CollisionFidelity then mc.CollisionFidelity = partData.CollisionFidelity end
-			if mc.MeshId or mc.TextureId or mc.RenderFidelity then F3XRetry("SyncMesh", {mc}) end
-		end)
+	if className == "MeshPart" then
+		if partData.MeshId and isValidAssetUrl(partData.MeshId) then pcall(function() part.MeshId = partData.MeshId end) end
+		if partData.TextureID and isValidAssetUrl(partData.TextureID) then pcall(function() part.TextureID = partData.TextureID end) end
+		if partData.RenderFidelity then pcall(function()
+			local name = tostring(partData.RenderFidelity):gsub("Enum%.RenderFidelity%.", "")
+			part.RenderFidelity = Enum.RenderFidelity[name]
+		end) end
+		if partData.CollisionFidelity then pcall(function()
+			local name = tostring(partData.CollisionFidelity):gsub("Enum%.CollisionFidelity%.", "")
+			part.CollisionFidelity = Enum.CollisionFidelity[name]
+		end) end
 	end
 
 	if partData.Children then
@@ -1365,39 +1366,41 @@ local function applyPartProperties(part, partData, cf, partMap)
 					if cd.Transparency ~= nil then tc.Transparency = cd.Transparency end
 					F3XRetry("SyncTexture", {tc})
 				elseif cd.ClassName == "SpecialMesh" then
+					if CONFIG.Debug then print("Applying SpecialMesh to", part.Name, "MeshType:", cd.MeshType, "Scale:", cd.Scale and table.concat(cd.Scale, ",") or "nil", "Offset:", cd.Offset and table.concat(cd.Offset, ",") or "nil", "MeshId:", cd.MeshId or "nil", "TextureId:", cd.TextureId or "nil") end
 					F3XRetry("CreateMeshes", {part})
-					if not part:FindFirstChildOfClass("SpecialMesh") then
-						Instance.new("SpecialMesh").Parent = part
-					end
+					local mesh = part:FindFirstChildOfClass("SpecialMesh")
+					if not mesh then mesh = Instance.new("SpecialMesh"); mesh.Parent = part end
 					local mc = {Part = part}
 					if cd.MeshType then
 						local ok, mt = pcall(function() return parseMeshType(cd.MeshType) end)
-						if ok then mc.MeshType = mt end
+						if ok then mc.MeshType = mt; mesh.MeshType = mt end
 					end
-					if cd.MeshId and cd.MeshId ~= "" and isValidAssetUrl(cd.MeshId) then mc.MeshId = cd.MeshId end
-					if cd.TextureId and cd.TextureId ~= "" and isValidAssetUrl(cd.TextureId) then mc.TextureId = cd.TextureId end
+					if cd.MeshId and cd.MeshId ~= "" and isValidAssetUrl(cd.MeshId) then mc.MeshId = cd.MeshId; mesh.MeshId = cd.MeshId end
+					if cd.TextureId and cd.TextureId ~= "" and isValidAssetUrl(cd.TextureId) then mc.TextureId = cd.TextureId; mesh.TextureId = cd.TextureId end
 					if cd.Scale then
 						local ok, s = pcall(function() return parseVector3(cd.Scale) end)
-						if ok then mc.Scale = s else mc.Scale = Vector3.new(1, 1, 1) end
-					else mc.Scale = Vector3.new(1, 1, 1) end
+						if ok then mc.Scale = s; mesh.Scale = s else mc.Scale = Vector3.new(1, 1, 1); mesh.Scale = Vector3.new(1, 1, 1) end
+					else mc.Scale = Vector3.new(1, 1, 1); mesh.Scale = Vector3.new(1, 1, 1) end
 					if cd.Offset then
 						local ok, o = pcall(function() return parseVector3(cd.Offset) end)
-						if ok then mc.Offset = o else mc.Offset = Vector3.new(0, 0, 0) end
-					else mc.Offset = Vector3.new(0, 0, 0) end
+						if ok then mc.Offset = o; mesh.Offset = o else mc.Offset = Vector3.new(0, 0, 0); mesh.Offset = Vector3.new(0, 0, 0) end
+					else mc.Offset = Vector3.new(0, 0, 0); mesh.Offset = Vector3.new(0, 0, 0) end
 					F3XRetry("SyncMesh", {mc})
 				elseif cd.ClassName == "BlockMesh" or cd.ClassName == "CylinderMesh" then
 					F3XRetry("CreateMeshes", {part})
+					local mesh = part:FindFirstChildOfClass("SpecialMesh")
+					if not mesh then mesh = Instance.new("SpecialMesh"); mesh.Parent = part end
 					local mc = {Part = part}
-					if cd.ClassName == "BlockMesh" then mc.MeshType = Enum.MeshType.Brick end
-					if cd.ClassName == "CylinderMesh" then mc.MeshType = Enum.MeshType.Cylinder end
+					if cd.ClassName == "BlockMesh" then mc.MeshType = Enum.MeshType.Brick; mesh.MeshType = Enum.MeshType.Brick end
+					if cd.ClassName == "CylinderMesh" then mc.MeshType = Enum.MeshType.Cylinder; mesh.MeshType = Enum.MeshType.Cylinder end
 					if cd.Scale then
 						local ok, s = pcall(function() return parseVector3(cd.Scale) end)
-						if ok then mc.Scale = s else mc.Scale = Vector3.new(1, 1, 1) end
-					else mc.Scale = Vector3.new(1, 1, 1) end
+						if ok then mc.Scale = s; mesh.Scale = s else mc.Scale = Vector3.new(1, 1, 1); mesh.Scale = Vector3.new(1, 1, 1) end
+					else mc.Scale = Vector3.new(1, 1, 1); mesh.Scale = Vector3.new(1, 1, 1) end
 					if cd.Offset then
 						local ok, o = pcall(function() return parseVector3(cd.Offset) end)
-						if ok then mc.Offset = o else mc.Offset = Vector3.new(0, 0, 0) end
-					else mc.Offset = Vector3.new(0, 0, 0) end
+						if ok then mc.Offset = o; mesh.Offset = o else mc.Offset = Vector3.new(0, 0, 0); mesh.Offset = Vector3.new(0, 0, 0) end
+					else mc.Offset = Vector3.new(0, 0, 0); mesh.Offset = Vector3.new(0, 0, 0) end
 					F3XRetry("SyncMesh", {mc})
 				elseif cd.ClassName == "SurfaceLight" or cd.ClassName == "PointLight" or cd.ClassName == "SpotLight" then
 					F3XRetry("CreateLights", {{Part = part, LightType = cd.ClassName}})
@@ -1476,7 +1479,7 @@ local function normalBuild(parts, total, partMap)
 		if not F3X:ValidateTool() then task.wait(1); F3X:ValidateTool() end
 		local className = partData.ClassName or "Part"; local partType = getPartType(className)
 		local cf = applyBuildTransform(parseCFrame(partData.CFrame))
-		local part; local createOk = pcall(function() part = F3XRetry("CreatePart", partType, CFrame.new(0, 5000, 0)) end)
+		local part; local createOk = pcall(function() part = F3XRetry("CreatePart", partType, CFrame.new(0, 5000 + i * 10, 0)) end)
 		if not createOk or not part then failedCount = failedCount + 1
 		else
 			partMap[i] = part
@@ -1500,13 +1503,13 @@ local function hyperBuild(parts, total, partMap)
 	for i, partData in ipairs(parts) do
 		local ci = ((i - 1) % threadCount) + 1; chunks[ci][#chunks[ci] + 1] = {Index = i, Data = partData}
 	end
-	local function buildChunk(chunkParts)
+		local function buildChunk(chunkParts)
 		for _, entry in ipairs(chunkParts) do
 			local i = entry.Index; local partData = entry.Data
 			local partType = getPartType(partData.ClassName or "Part")
 			local cf = applyBuildTransform(parseCFrame(partData.CFrame))
 			if not F3X:ValidateTool() then task.wait(1); F3X:ValidateTool() end
-			local part; local createOk = pcall(function() part = F3XRetry("CreatePart", partType, CFrame.new(0, 5000, 0)) end)
+			local part; local createOk = pcall(function() part = F3XRetry("CreatePart", partType, CFrame.new(0, 5000 + i * 10, 0)) end)
 			if not createOk or not part then failedCount = failedCount + 1
 			else
 				partMap[i] = part
@@ -2404,8 +2407,10 @@ local function f3xConnect()
 					elseif cmd == "SetLocked" then
 						return F3X:Invoke("SetLocked", args[1], args[2])
 					elseif cmd == "CreateMeshes" then
-						-- args[1] is {part} or {part1, part2, ...}
-						-- F3X expects {{Part = p1}, {Part = p2}, ...}
+						-- Try raw parts: {part1, part2, ...}
+						local ok1, r1 = pcall(function() return F3X:Invoke("CreateMeshes", args[1]) end)
+						if ok1 and r1 then return r1 end
+						-- Try wrapped: {{Part = p1}, {Part = p2}, ...}
 						local c = {}
 						for _, p in ipairs(args[1]) do c[#c + 1] = {Part = p} end
 						return F3X:Invoke("CreateMeshes", c)
