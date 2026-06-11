@@ -1278,28 +1278,11 @@ end)
 -- ==================== 10. PROPERTY APPLIER ====================
 local function applyF3XMesh(part, meshData)
 	if not part or not part:FindFirstAncestorOfClass("DataModel") then return false end
-	local existingMesh = part:FindFirstChildOfClass("SpecialMesh")
-	if existingMesh then
-		local correct = true
-		if meshData.MeshType and existingMesh.MeshType ~= meshData.MeshType then correct = false end
-		if meshData.MeshId and existingMesh.MeshId ~= meshData.MeshId then correct = false end
-		if meshData.TextureId and existingMesh.TextureId ~= meshData.TextureId then correct = false end
-		if meshData.Scale and existingMesh.Scale ~= meshData.Scale then correct = false end
-		if meshData.Offset and existingMesh.Offset ~= meshData.Offset then correct = false end
-		if correct then return true end
-	end
 	local mc = {Part = part}
 	for k, v in pairs(meshData) do if k ~= "_meshCount" then mc[k] = v end end
-	if not existingMesh then
-		pcall(function() F3X:Invoke("CreateMeshes", {{Part = part}}) end)
-	end
-	local syncOk = pcall(function() F3X:Invoke("SyncMesh", {mc}) end)
-	if not syncOk then return false end
-	local vm = part:FindFirstChildOfClass("SpecialMesh")
-	if not vm then return false end
-	if meshData.MeshType and vm.MeshType ~= meshData.MeshType then return false end
-	if meshData.MeshId and vm.MeshId ~= meshData.MeshId then return false end
-	return true
+	local createOk = pcall(function() F3X:Invoke("CreateMeshes", {{Part = part}}) end)
+	if not createOk then return false end
+	return pcall(function() F3X:Invoke("SyncMesh", {mc}) end)
 end
 local function applyPartProperties(part, partData, cf, partMap)
 	local resizeChanges = {}; local colorChanges = {}; local materialChanges = {}
@@ -1346,9 +1329,13 @@ local function applyPartProperties(part, partData, cf, partMap)
 	if partData.Shape then
 		local shapeName = partData.Shape:match("Enum%.PartType%.(.+)") or partData.Shape
 		if shapeName == "Cylinder" then
-			applyF3XMesh(part, {MeshType = Enum.MeshType.Cylinder, Scale = Vector3.new(1, 1, 1), Offset = Vector3.new(0, 0, 0)})
+			local mc = {Part = part, MeshType = Enum.MeshType.Cylinder, Scale = Vector3.new(1, 1, 1), Offset = Vector3.new(0, 0, 0)}
+			pcall(function() F3X:Invoke("CreateMeshes", {{Part = part}}) end)
+			pcall(function() F3X:Invoke("SyncMesh", {mc}) end)
 		elseif shapeName == "Ball" then
-			applyF3XMesh(part, {MeshType = Enum.MeshType.Sphere, Scale = Vector3.new(1, 1, 1), Offset = Vector3.new(0, 0, 0)})
+			local mc = {Part = part, MeshType = Enum.MeshType.Sphere, Scale = Vector3.new(1, 1, 1), Offset = Vector3.new(0, 0, 0)}
+			pcall(function() F3X:Invoke("CreateMeshes", {{Part = part}}) end)
+			pcall(function() F3X:Invoke("SyncMesh", {mc}) end)
 		else
 			pcall(function() part.Shape = parseShape(partData.Shape) end)
 		end
@@ -2222,13 +2209,6 @@ end)
 -- ==================== 15. BUILD QUEUE ====================
 local buildQueue = {}; local isBuilding = false
 
-local goToBuildBtn = Instance.new("TextButton")
-goToBuildBtn.Size = UDim2.new(1, -20, 0, 30); goToBuildBtn.Position = UDim2.new(0, 10, 1, -78)
-goToBuildBtn.BackgroundColor3 = THEME.Accent; goToBuildBtn.Text = "?? Go to Build"
-goToBuildBtn.TextColor3 = THEME.TextPrimary; goToBuildBtn.TextSize = 12; goToBuildBtn.Font = Enum.Font.GothamBold
-goToBuildBtn.AutoButtonColor = true; goToBuildBtn.Visible = false
-Instance.new("UICorner", goToBuildBtn).CornerRadius = UDim.new(0, 6); goToBuildBtn.Parent = mainFrame
-
 local function processQueue()
 	if isBuilding then return end
 	while #buildQueue > 0 do
@@ -2244,7 +2224,7 @@ local function processQueue()
 		local partMap = {}; local buildStart = tick(); local failedCount = 0
 		progressFill.Size = UDim2.new(0, 0, 1, 0); progressFrame.Visible = true
 		local nc = pcall(function() F3XRetry("New", item.Name or "Imported Build") end)
-		if not nc then notify("F3X init failed!"); statusLabel.Text = "F3X init failed"; isBuilding = false; goToBuildBtn.Visible = false; buildBtn.Visible = false; return end
+		if not nc then notify("F3X init failed!"); statusLabel.Text = "F3X init failed"; isBuilding = false; buildBtn.Visible = false; return end
 		task.wait(0.2)
 		if CONFIG.HyperMode and total > 50 then
 			failedCount = hyperBuild(parts, total, partMap)
@@ -2287,7 +2267,7 @@ local function processQueue()
 			end
 		end
 		local centerPos = calculateBuildCenter(parts)
-		goToBuildBtn.Visible = true; goToBuildBtn.MouseButton1Click:Connect(function() teleportToBuild(centerPos) end)
+		teleportToBuild(centerPos)
 		isBuilding = false
 	end end
 
