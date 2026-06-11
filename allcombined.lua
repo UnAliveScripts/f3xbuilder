@@ -554,7 +554,7 @@ makeTabBtn("Selector")
 makeTabBtn("Settings")
 
 -- ==================== BUILDER TAB ====================
-local BUILDER_CONTROLS_HEIGHT = 284
+local BUILDER_CONTROLS_HEIGHT = 314
 local builderFrame = Instance.new("Frame")
 builderFrame.Size = UDim2.new(1, -20, 1, -90)
 builderFrame.Position = UDim2.new(0, 10, 0, 90)
@@ -676,7 +676,7 @@ githubListLayout.Parent = githubScroll
 
 -- Build controls under builder list
 local buildCtrlFrame = Instance.new("Frame")
-buildCtrlFrame.Size = UDim2.new(1, 0, 0, 240)
+buildCtrlFrame.Size = UDim2.new(1, 0, 0, 270)
 buildCtrlFrame.Position = UDim2.new(0, 0, 1, -284)
 buildCtrlFrame.BackgroundTransparency = 1
 buildCtrlFrame.Parent = builderFrame
@@ -899,7 +899,219 @@ local speedSlider = makeSliderRow(slidersFrame, 20, "Delay:", Color3.fromRGB(0, 
 local batchSlider = makeSliderRow(slidersFrame, 48, "Batch:", Color3.fromRGB(0, 255, 100), 1, 1000, 10, "int", "prts")
 local threadSlider = makeSliderRow(slidersFrame, 76, "Thread:", Color3.fromRGB(255, 100, 50), 1, 32, 4, "int", "par")
 
--- Offset/Rotate/Scale controls
+-- Ghost preview controls
+local ghostRow = Instance.new("Frame")
+ghostRow.Size = UDim2.new(1, 0, 0, 28)
+ghostRow.Position = UDim2.new(0, 0, 0, 198)
+ghostRow.BackgroundTransparency = 1
+ghostRow.Parent = buildCtrlFrame
+
+local previewBtn = Instance.new("TextButton")
+previewBtn.Size = UDim2.new(0.48, -2, 1, 0)
+previewBtn.BackgroundColor3 = Color3.fromRGB(0, 100, 180)
+previewBtn.Text = "👻 Preview"
+previewBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+previewBtn.TextSize = 11
+previewBtn.Font = Enum.Font.GothamBold
+Instance.new("UICorner", previewBtn).CornerRadius = UDim.new(0, 6)
+previewBtn.Parent = ghostRow
+
+local clearGhostBtn = Instance.new("TextButton")
+clearGhostBtn.Size = UDim2.new(0.48, -2, 1, 0)
+clearGhostBtn.Position = UDim2.new(0.52, 4, 0, 0)
+clearGhostBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+clearGhostBtn.Text = "❌ Clear"
+clearGhostBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+clearGhostBtn.TextSize = 11
+clearGhostBtn.Font = Enum.Font.GothamBold
+clearGhostBtn.Visible = false
+Instance.new("UICorner", clearGhostBtn).CornerRadius = UDim.new(0, 6)
+clearGhostBtn.Parent = ghostRow
+
+previewBtn.MouseButton1Click:Connect(function()
+	if not selectedBuildData then notify("No build selected"); return end
+	GhostSystem.Update(selectedBuildData)
+	previewBtn.Visible = false; clearGhostBtn.Visible = true; buildBtn.Text = "✅ Confirm Build"
+end)
+
+clearGhostBtn.MouseButton1Click:Connect(function()
+	GhostSystem.Clear()
+end)
+
+-- 11. CLIPBOARD / CLONE / UNGROUP / REMOVEWELDS / DUPLICATE
+local function copyToClipboard(data)
+	local ok, json = pcall(function() return HttpService:JSONEncode(data) end)
+	if not ok then notify("JSON encode failed"); return end
+	local clipOk = pcall(function() setclipboard(json) end)
+	if clipOk then notify(string.format("📋 Copied %d parts to clipboard", #data.Parts)) else notify("Clipboard not available") end
+end
+
+local function pasteFromClipboard()
+	local clipOk, json = pcall(getclipboard)
+	if not clipOk or not json or json == "" then notify("Clipboard empty or inaccessible"); return nil end
+	local ok2, data = pcall(function() return HttpService:JSONDecode(json) end)
+	if not ok2 then notify("Invalid JSON in clipboard"); return nil end
+	if not data.Parts or type(data.Parts) ~= "table" then notify("Clipboard data has no Parts"); return nil end
+	return data
+end
+
+-- Utility buttons in selector tab
+local function makeToolBtn(parent, text, posY, color, callback)
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(1, -10, 0, 26)
+	btn.Position = UDim2.new(0, 5, 0, posY)
+	btn.BackgroundColor3 = color or Color3.fromRGB(40, 40, 50)
+	btn.Text = text
+	btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	btn.TextSize = 11
+	btn.Font = Enum.Font.GothamBold
+	Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+	btn.Parent = parent
+	btn.MouseButton1Click:Connect(callback)
+	return btn
+end
+
+local toolSection = Instance.new("Frame")
+toolSection.Size = UDim2.new(1, 0, 0, 190)
+toolSection.Position = UDim2.new(0, 0, 1, -274)
+toolSection.BackgroundTransparency = 1
+toolSection.Parent = selectorFrame
+
+local toolSectionLabel = Instance.new("TextLabel")
+toolSectionLabel.Size = UDim2.new(1, -10, 0, 16)
+toolSectionLabel.Position = UDim2.new(0, 5, 0, 0)
+toolSectionLabel.BackgroundTransparency = 1
+toolSectionLabel.Text = "🔧 Tools"
+toolSectionLabel.TextColor3 = Color3.fromRGB(180, 180, 190)
+toolSectionLabel.TextSize = 10
+toolSectionLabel.Font = Enum.Font.GothamBold
+toolSectionLabel.TextXAlignment = Enum.TextXAlignment.Left
+toolSectionLabel.Parent = toolSection
+
+makeToolBtn(toolSection, "📋 Clone Selection", 18, Color3.fromRGB(0, 120, 180), function()
+	if not selectedBuildData then notify("No build selected"); return end
+	local total = #selectedBuildData.Parts; local built = {}
+	for i, pd in ipairs(selectedBuildData.Parts) do
+		local cf = parseCFrame(pd.CFrame)
+		if CONFIG.BuildOffset and CONFIG.BuildOffset.Magnitude > 0 then cf = cf + CONFIG.BuildOffset end
+		local ok, part = pcall(function() return F3XRetry("CreatePart", getPartType(pd.ClassName or "Part"), CFrame.new(0, 5000, 0)) end)
+		if ok and part then
+			built[#built+1] = part
+			pcall(function() F3XRetry("SyncMove", {{Part = part, CFrame = cf}}) end)
+			applyPartProperties(part, pd, cf, nil)
+			task.wait(CONFIG.BuildSpeed)
+		end
+	end
+	notify(string.format("📋 Cloned %d parts", #built))
+end)
+
+makeToolBtn(toolSection, "📂 Ungroup Selection", 48, Color3.fromRGB(120, 80, 0), function()
+	notify("Ungroup: select models in workspace via Selector tab first")
+end)
+
+makeToolBtn(toolSection, "🔗 Remove Welds", 78, Color3.fromRGB(150, 50, 50), function()
+	notify("RemoveWelds: use on workspace parts via Selector tab")
+end)
+
+makeToolBtn(toolSection, "📋 Paste JSON", 108, Color3.fromRGB(0, 150, 100), function()
+	local data = pasteFromClipboard()
+	if data then
+		selectedBuildData = data; selectedBuildName = "Clipboard Import"
+		statusLabel.Text = "Imported from clipboard (" .. #data.Parts .. " parts)"
+		buildBtn.Visible = true; queueBtn.Visible = true; refreshQueueUI()
+		notify("✅ Loaded " .. #data.Parts .. " parts from clipboard")
+	end
+end)
+
+makeToolBtn(toolSection, "📋 Copy to Clipboard", 138, Color3.fromRGB(0, 100, 150), function()
+	if not selectedBuildData then notify("No build selected"); return end
+	copyToClipboard(selectedBuildData)
+end)
+
+makeToolBtn(toolSection, "📐 Smart Duplicate", 168, Color3.fromRGB(0, 150, 200), function()
+	if not selectedBuildData or not selectedBuildData.Parts then notify("No build data"); return end
+	local built = {}
+	for i, pd in ipairs(selectedBuildData.Parts) do
+		local cf = parseCFrame(pd.CFrame)
+		if CONFIG.BuildOffset and CONFIG.BuildOffset.Magnitude > 0 then cf = cf + CONFIG.BuildOffset end
+		local ok, part = pcall(function() return F3XRetry("CreatePart", getPartType(pd.ClassName or "Part"), CFrame.new(0, 5000, 0)) end)
+		if ok and part then
+			built[#built+1] = part
+			local offset = Vector3.new(10, 0, 0)
+			pcall(function() F3XRetry("SyncMove", {{Part = part, CFrame = cf + offset}}) end)
+			applyPartProperties(part, pd, cf + offset, nil)
+			task.wait(CONFIG.BuildSpeed)
+		end
+	end
+	notify(string.format("📐 Duplicated %d parts with offset", #built))
+end)
+
+-- Part Counter + Search/Filter for file list
+local searchFrame = Instance.new("Frame")
+searchFrame.Size = UDim2.new(1, 0, 0, 44)
+searchFrame.Position = UDim2.new(0, 0, 1, -48)
+searchFrame.BackgroundTransparency = 1
+searchFrame.Parent = localFrame
+
+local searchBox = Instance.new("TextBox")
+searchBox.Size = UDim2.new(1, 0, 0, 22)
+searchBox.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+searchBox.Text = ""
+searchBox.PlaceholderText = "🔍 Search builds..."
+searchBox.PlaceholderColor3 = Color3.fromRGB(100, 100, 110)
+searchBox.TextColor3 = Color3.fromRGB(200, 200, 210)
+searchBox.TextSize = 11
+searchBox.Font = Enum.Font.Gotham
+searchBox.ClearTextOnFocus = false
+Instance.new("UICorner", searchBox).CornerRadius = UDim.new(0, 6)
+searchBox.Parent = searchFrame
+
+local partCountLabel = Instance.new("TextLabel")
+partCountLabel.Size = UDim2.new(1, 0, 0, 18)
+partCountLabel.Position = UDim2.new(0, 0, 0, 26)
+partCountLabel.BackgroundTransparency = 1
+partCountLabel.Text = ""
+partCountLabel.TextColor3 = Color3.fromRGB(120, 120, 130)
+partCountLabel.TextSize = 10
+partCountLabel.Font = Enum.Font.Gotham
+partCountLabel.TextXAlignment = Enum.TextXAlignment.Left
+partCountLabel.Parent = searchFrame
+
+searchBox.FocusLost:Connect(function()
+	clearLocalList()
+	local filter = searchBox.Text:lower()
+	local files = pcall(function() return listfiles(CONFIG.LocalFolder) end)
+	if files and type(files) == "table" then
+		for _, f in ipairs(files) do
+			local name = f:match("([^/\\]+)$")
+			if name and name:lower():find(filter or "", 1, true) then
+				pcall(function() addLocalFile(f) end)
+			end
+		end
+	end
+	local total = #(pcall(function() return listfiles(CONFIG.LocalFolder) end) or {})
+	partCountLabel.Text = string.format("%d builds total", total)
+end)
+
+-- Hook refreshLocalBtn to also update counter and respect filter
+refreshLocalBtn.MouseButton1Click:Connect(function()
+	clearLocalList()
+	local files = pcall(function() return listfiles(CONFIG.LocalFolder) end)
+	if files and type(files) == "table" then
+		local filter = searchBox.Text:lower()
+		local shown = 0
+		for _, f in ipairs(files) do
+			local name = f:match("([^/\\]+)$")
+			if name and (filter == "" or name:lower():find(filter, 1, true)) then
+				pcall(function() addLocalFile(f) end); shown += 1
+			end
+		end
+		partCountLabel.Text = string.format("%d builds shown / %d total", shown, #files)
+	end
+	notify("Refreshed")
+end)
+
+-- 12. Offset/Rotate/Scale controls
 local offsetFrame = Instance.new("Frame")
 offsetFrame.Size = UDim2.new(1, 0, 0, 42)
 offsetFrame.Position = UDim2.new(0, 0, 1, -42)
@@ -984,6 +1196,7 @@ end
 for _, axis in ipairs({"X", "Y", "Z"}) do
 	offsetBoxes[axis].FocusLost:Connect(function()
 		updateOffset()
+		GhostSystem.QueueUpdate(selectedBuildData)
 	end)
 end
 
@@ -991,6 +1204,7 @@ rot90Btn.MouseButton1Click:Connect(function()
 	CONFIG.BuildRot90 = (CONFIG.BuildRot90 + 90) % 360
 	rot90Btn.Text = CONFIG.BuildRot90 == 0 and "↻" or string.format("↻%d°", CONFIG.BuildRot90)
 	notify("Rotation: " .. CONFIG.BuildRot90 .. "°")
+	GhostSystem.QueueUpdate(selectedBuildData)
 end)
 
 scaleBox.FocusLost:Connect(function()
@@ -1000,6 +1214,7 @@ scaleBox.FocusLost:Connect(function()
 	else
 		scaleBox.Text = tostring(CONFIG.BuildScale)
 	end
+	GhostSystem.QueueUpdate(selectedBuildData)
 end)
 
 local buildBtn = Instance.new("TextButton")
@@ -1062,7 +1277,7 @@ selectorStatus.TextXAlignment = Enum.TextXAlignment.Left
 selectorStatus.Parent = selectorFrame
 
 local selScroll = Instance.new("ScrollingFrame")
-selScroll.Size = UDim2.new(1, 0, 1, -188)
+selScroll.Size = UDim2.new(1, 0, 1, -294)
 selScroll.Position = UDim2.new(0, 0, 0, 24)
 selScroll.BackgroundColor3 = Color3.fromRGB(12, 12, 16)
 selScroll.BorderSizePixel = 0
@@ -1823,7 +2038,65 @@ local function hyperBuild(parts, total, partMap)
 	return failed
 end
 
--- 10. FILE I/O (Local + GitHub)
+-- 10. GHOST PREVIEW SYSTEM
+local GhostSystem = {}
+local ghostFolder = nil
+local ghostParts = {}
+local ghostBounds = nil
+local ghostEnabled = false
+local GHOST_LIMIT = 200
+local GHOST_COLOR = Color3.fromRGB(0, 170, 255)
+local GHOST_TRANSPARENCY = 0.85
+
+function GhostSystem.Clear()
+	if ghostFolder then pcall(function() ghostFolder:Destroy() end); ghostFolder = nil end
+	ghostParts = {}; ghostBounds = nil; ghostEnabled = false
+	previewBtn.Visible = true; clearGhostBtn.Visible = false; buildBtn.Text = "🔨 Build Selected"
+end
+
+function GhostSystem.Update(buildData)
+	GhostSystem.Clear()
+	if not buildData or not buildData.Parts then return end
+	ghostEnabled = true
+	ghostFolder = Instance.new("Folder"); ghostFolder.Name = "F3X_Ghost"; ghostFolder.Parent = workspace
+	local total = #buildData.Parts
+	local sampleRate = math.max(1, math.floor(total / GHOST_LIMIT))
+	local minPos, maxPos = Vector3.new(math.huge, math.huge, math.huge), Vector3.new(-math.huge, -math.huge, -math.huge)
+	for i, pd in ipairs(buildData.Parts) do
+		local cf = parseCFrame(pd.CFrame)
+		local sz = parseVector3(pd.Size)
+		if CONFIG.BuildOffset and CONFIG.BuildOffset.Magnitude > 0 then cf = cf + CONFIG.BuildOffset end
+		if CONFIG.BuildRot90 and CONFIG.BuildRot90 ~= 0 then cf = cf * CFrame.Angles(0, math.rad(CONFIG.BuildRot90), 0) end
+		if CONFIG.BuildScale and CONFIG.BuildScale ~= 1 then sz = sz * CONFIG.BuildScale end
+		local half = sz / 2; local pos = cf.Position
+		minPos = Vector3.new(math.min(minPos.X, pos.X - half.X), math.min(minPos.Y, pos.Y - half.Y), math.min(minPos.Z, pos.Z - half.Z))
+		maxPos = Vector3.new(math.max(maxPos.X, pos.X + half.X), math.max(maxPos.Y, pos.Y + half.Y), math.max(maxPos.Z, pos.Z + half.Z))
+		if i % sampleRate == 0 or i == 1 or i == total then
+			local g = Instance.new("Part"); g.Name = "Ghost_"..i
+			g.CFrame = cf; g.Size = sz; g.Anchored = true; g.CanCollide = false; g.CanQuery = false; g.CanTouch = false
+			g.Transparency = GHOST_TRANSPARENCY; g.Color = GHOST_COLOR; g.Material = Enum.Material.ForceField; g.CastShadow = false
+			g.Parent = ghostFolder
+			local box = Instance.new("SelectionBox"); box.Adornee = g; box.Color3 = GHOST_COLOR; box.LineThickness = 0.02; box.Parent = g
+			ghostParts[i] = g
+		end
+	end
+	local center = (minPos + maxPos) / 2; local bs = maxPos - minPos
+	ghostBounds = Instance.new("Part"); ghostBounds.Name = "Ghost_Bounds"
+	ghostBounds.CFrame = CFrame.new(center); ghostBounds.Size = bs; ghostBounds.Anchored = true
+	ghostBounds.CanCollide = false; ghostBounds.CanQuery = false; ghostBounds.Transparency = 0.95
+	ghostBounds.Color = Color3.fromRGB(255, 100, 0); ghostBounds.Material = Enum.Material.Neon; ghostBounds.CastShadow = false
+	ghostBounds.Parent = ghostFolder
+	local bb = Instance.new("SelectionBox"); bb.Adornee = ghostBounds; bb.Color3 = Color3.fromRGB(255, 100, 0); bb.LineThickness = 0.03; bb.Parent = ghostBounds
+	notify(string.format("👻 Ghost: %d samples + bounds (%d total)", math.min(total, GHOST_LIMIT), total))
+end
+
+local updateQueued = false
+function GhostSystem.QueueUpdate(data)
+	if updateQueued then return end; updateQueued = true
+	task.delay(0.15, function() updateQueued = false; if ghostEnabled and data then GhostSystem.Update(data) end end)
+end
+
+-- 12. FILE I/O (Local + GitHub)
 local selectedBuildData = nil
 local selectedBuildName = nil
 local buildHistory = {}
@@ -1979,7 +2252,7 @@ fetchGithubBtn.MouseButton1Click:Connect(function() local ok, err = pcall(functi
 	notify(string.format("Found %d GitHub builds", cnt))
 end) if not ok then warn("[F3X] Error:", err) end end)
 
--- 11. EXPORT SYSTEM
+-- 12. EXPORT SYSTEM
 local function streamExport(builderFunc, baseFilename, totalParts, ext)
 	if not hasFileAccess then notify("No file access!"); return false end
 	exportInProgress = true; progressFrame.Visible = true; progressFill.Size = UDim2.new(0, 0, 1, 0)
@@ -2245,7 +2518,7 @@ exportLuaBtn.MouseButton1Click:Connect(function() local ok, err = pcall(function
 	end)()
 end) if not ok then warn("[F3X] Error:", err) end end)
 
--- 12. HISTORY SYSTEM
+-- 14. HISTORY SYSTEM
 local function addHistory(name, parts, failed)
 	local entry = {Name = name or "Unknown", Timestamp = os.date("%Y-%m-%d %H:%M:%S"), PartCount = parts, Failed = failed, Success = parts - failed}
 	table.insert(buildHistory, 1, entry)
@@ -2269,9 +2542,10 @@ local function refreshHistory()
 	end
 end
 
--- 13. MAIN BUILD TRIGGER
+-- 15. MAIN BUILD TRIGGER
 
 local function doBuild(name, data, isQueueItem)
+	GhostSystem.Clear()
 	if not data then notify("No build data!"); return end
 	local parts = data.Parts
 	if not parts or typeof(parts) ~= "table" then notify("Invalid build data!"); return end
@@ -2434,5 +2708,5 @@ buildAllBtn.MouseButton1Click:Connect(function() local ok, err = pcall(function(
 	end)
 end) if not ok then warn("[F3X] Error:", err) end end)
 
--- 14. INIT
+-- 16. INIT
 if hasFileAccess then notify("F3X Build System loaded!") else notify("F3X Build System loaded! (Limited file access)") end
