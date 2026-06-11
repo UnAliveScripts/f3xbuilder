@@ -1366,6 +1366,9 @@ local function applyPartProperties(part, partData, cf, partMap)
 					F3XRetry("SyncTexture", {tc})
 				elseif cd.ClassName == "SpecialMesh" then
 					F3XRetry("CreateMeshes", {part})
+					if not part:FindFirstChildOfClass("SpecialMesh") then
+						Instance.new("SpecialMesh").Parent = part
+					end
 					local mc = {Part = part}
 					if cd.MeshType then
 						local ok, mt = pcall(function() return parseMeshType(cd.MeshType) end)
@@ -2401,7 +2404,11 @@ local function f3xConnect()
 					elseif cmd == "SetLocked" then
 						return F3X:Invoke("SetLocked", args[1], args[2])
 					elseif cmd == "CreateMeshes" then
-						return F3X:Invoke("CreateMeshes", {Parts = args[1]})
+						-- args[1] is {part} or {part1, part2, ...}
+						-- F3X expects {{Part = p1}, {Part = p2}, ...}
+						local c = {}
+						for _, p in ipairs(args[1]) do c[#c + 1] = {Part = p} end
+						return F3X:Invoke("CreateMeshes", c)
 					elseif cmd == "SyncMesh" then
 						return F3X:Invoke("SyncMesh", args[1])
 					elseif cmd == "CreateTextures" then
