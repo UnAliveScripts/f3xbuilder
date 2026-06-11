@@ -1382,7 +1382,7 @@ local function applyPartProperties(part, partData, targetCF, partMap)
 	if partData.Transparency ~= nil then md.Transparency = partData.Transparency end
 	if partData.Reflectance ~= nil then md.Reflectance = partData.Reflectance end
 	if next(md) then table.insert(matC, md) end
-	table.insert(ancC, {Part = part, Anchored = false})
+	table.insert(ancC, {Part = part, Anchored = CONFIG.BuildAnchored or (partData.Anchored == true)})
 	if partData.CanCollide ~= nil then table.insert(collC, {Part = part, CanCollide = partData.CanCollide}) end
 	local surfs = {}
 	if partData.TopSurface then surfs.Top = parseSurface(partData.TopSurface) end
@@ -1491,13 +1491,17 @@ local function applyPartProperties(part, partData, targetCF, partMap)
 					if p0 and p1 then pcall(function()
 						local weldObj = F3XRetry("CreateWelds", {p0}, p1)
 						if not weldObj or typeof(weldObj) ~= "Instance" then
-							for _, child in ipairs(p0:GetChildren()) do
-								if (child:IsA("Weld") or child:IsA("Motor") or child:IsA("Motor6D")) and child.Part1 == p1 then
-									weldObj = child; break
+							local function findWeld(container)
+								for _, child in ipairs(container:GetChildren()) do
+									if (child:IsA("Weld") or child:IsA("Motor") or child:IsA("Motor6D")) and child.Part0 == p0 and child.Part1 == p1 then
+										return child
+									end
 								end
+								return nil
 							end
+							weldObj = findWeld(p0) or findWeld(p1) or findWeld(workspace)
 						end
-						if weldObj and typeof(weldObj) == "Instance" then
+						if weldObj and typeof(weldObj) == "Instance" and (cd.ClassName ~= "WeldConstraint") then
 							if cd.C0 then pcall(function() weldObj.C0 = parseCFrame(cd.C0) end) end
 							if cd.C1 then pcall(function() weldObj.C1 = parseCFrame(cd.C1) end) end
 						end
@@ -2109,13 +2113,17 @@ buildBtn.MouseButton1Click:Connect(function() local ok, err = pcall(function()
 				if p0 and p1 then pcall(function()
 					local weldObj = F3XRetry("CreateWelds", {p0}, p1)
 					if not weldObj or typeof(weldObj) ~= "Instance" then
-						for _, child in ipairs(p0:GetChildren()) do
-							if (child:IsA("Weld") or child:IsA("Motor") or child:IsA("Motor6D")) and child.Part1 == p1 then
-								weldObj = child; break
+						local function findWeld(container)
+							for _, child in ipairs(container:GetChildren()) do
+								if (child:IsA("Weld") or child:IsA("Motor") or child:IsA("Motor6D")) and child.Part0 == p0 and child.Part1 == p1 then
+									return child
+								end
 							end
+							return nil
 						end
+						weldObj = findWeld(p0) or findWeld(p1) or findWeld(workspace)
 					end
-					if weldObj and typeof(weldObj) == "Instance" then
+					if weldObj and typeof(weldObj) == "Instance" and (wd.ClassName or "Weld") ~= "WeldConstraint" then
 						if wd.C0 then pcall(function() weldObj.C0 = parseCFrame(wd.C0) end) end
 						if wd.C1 then pcall(function() weldObj.C1 = parseCFrame(wd.C1) end) end
 						if wd.ClassName == "Motor6D" then
@@ -2128,20 +2136,6 @@ buildBtn.MouseButton1Click:Connect(function() local ok, err = pcall(function()
 			end
 		end
 	end
-
-	-- Post-build anchoring
-	statusLabel.Text = "Setting anchors..."
-	local ancList = {}
-	for i, pd in ipairs(parts) do
-		local part = partMap[i]
-		if part then
-			local shouldAnchor = CONFIG.BuildAnchored or (pd.Anchored == true)
-			if part.Anchored ~= shouldAnchor then
-				table.insert(ancList, {Part = part, Anchored = shouldAnchor})
-			end
-		end
-	end
-	if #ancList > 0 then pcall(function() F3XRetry("SyncAnchor", ancList) end) end
 
 	-- Post-build validation
 	local builtCount = 0
