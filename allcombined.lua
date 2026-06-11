@@ -1770,131 +1770,6 @@ UserInputService.InputEnded:Connect(function(input)
 					if found >= CONFIG.MaxParts then break end
 		end
 	end
-	-- Shape (Cylinder/Ball) — F3X CreatePart only makes blocks
-	if partData.Shape and part:IsA("Part") then
-		local ok, shape = pcall(function() return Enum.PartType[partData.Shape] end)
-		if ok and shape then part.Shape = shape end
-	end
-	-- Motor6D (animated joints)
-	if partData.Motor6Ds then
-		for _, md in ipairs(partData.Motor6Ds) do
-			local p0, p1 = partMap and partMap[md.Part0Index], partMap and partMap[md.Part1Index]
-			if p0 and p1 then
-				local m = Instance.new("Motor6D"); m.Part0 = p0; m.Part1 = p1
-				m.C0 = md.C0 and parseCFrame(md.C0) or CFrame.new(); m.C1 = md.C1 and parseCFrame(md.C1) or CFrame.new()
-				m.Name = md.Name or "Motor"; m.Parent = p0
-			end
-		end
-	end
-	-- Constraints (Hinge, BallSocket, Spring, Rod, Rope, SlidingBall)
-	if partData.Constraints then
-		for _, cd in ipairs(partData.Constraints) do
-			local p0, p1 = partMap and partMap[cd.Part0Index], partMap and partMap[cd.Part1Index]
-			if p0 and p1 then
-				local okC, c = pcall(function() return Instance.new(cd.ClassName) end)
-				if okC and c then
-					local a0 = p0:FindFirstChild(cd.Attachment0) or Instance.new("Attachment", p0); a0.Name = cd.Attachment0 or "Attachment"
-					local a1 = p1:FindFirstChild(cd.Attachment1) or Instance.new("Attachment", p1); a1.Name = cd.Attachment1 or "Attachment"
-					c.Attachment0 = a0; c.Attachment1 = a1
-					if cd.LimitsEnabled ~= nil then c.LimitsEnabled = cd.LimitsEnabled end
-					if cd.Restitution ~= nil then c.Restitution = cd.Restitution end
-					if cd.UpperAngle ~= nil then c.UpperAngle = cd.UpperAngle end
-					if cd.LowerAngle ~= nil then c.LowerAngle = cd.LowerAngle end
-					if cd.Stiffness ~= nil then c.Stiffness = cd.Stiffness end
-					if cd.Damping ~= nil then c.Damping = cd.Damping end
-					if cd.FreeLength ~= nil then c.FreeLength = cd.FreeLength end
-					c.Name = cd.Name or cd.ClassName; c.Parent = p0
-				end
-			end
-		end
-	end
-	-- Attachments (for constraints)
-	if partData.Attachments then
-		for _, ad in ipairs(partData.Attachments) do
-			local a = Instance.new("Attachment"); a.Name = ad.Name or "Attachment"
-			if ad.Position then a.Position = parseVector3(ad.Position) end
-			if ad.Orientation then a.Orientation = parseVector3(ad.Orientation) end
-			if ad.Axis then a.Axis = parseVector3(ad.Axis) end
-			if ad.SecondaryAxis then a.SecondaryAxis = parseVector3(ad.SecondaryAxis) end
-			a.Parent = part
-		end
-	end
-	-- AlignPosition / AlignOrientation (modern BodyMovers)
-	if partData.AlignConstraints then
-		for _, ald in ipairs(partData.AlignConstraints) do
-			local okA, al = pcall(function() return Instance.new(ald.ClassName) end)
-			if okA and al then
-				al.Mode = ald.Mode or 0; al.Responsiveness = ald.Responsiveness or 10
-				al.MaxForce = ald.MaxForce or 100000; al.MaxVelocity = ald.MaxVelocity or math.huge
-				al.ReactionForceEnabled = ald.ReactionForceEnabled or false; al.RigidityEnabled = ald.RigidityEnabled or false
-				al.Attachment0 = part:FindFirstChild(ald.Attachment0) or Instance.new("Attachment", part)
-				if ald.Attachment1Part and partMap and partMap[ald.Attachment1Part] then
-					al.Attachment1 = partMap[ald.Attachment1Part]:FindFirstChild(ald.Attachment1) or nil
-				end
-				al.Parent = part
-			end
-		end
-	end
-	-- BodyMovers (legacy BodyPosition, BodyGyro, BodyVelocity)
-	if partData.BodyMovers then
-		for _, bd in ipairs(partData.BodyMovers) do
-			local okB, b = pcall(function() return Instance.new(bd.ClassName) end)
-			if okB and b then
-				if bd.MaxForce then b.MaxForce = parseVector3(bd.MaxForce) end
-				if bd.P then b.P = bd.P end
-				if bd.D then b.D = bd.D end
-				if bd.MaxTorque then b.MaxTorque = parseVector3(bd.MaxTorque) end
-				if bd.CFrame then b.CFrame = parseCFrame(bd.CFrame) end
-				if bd.Position then b.Position = parseVector3(bd.Position) end
-				if bd.Velocity then b.Velocity = parseVector3(bd.Velocity) end
-				b.Parent = part
-			end
-		end
-	end
-	-- ClickDetector / ProximityPrompt
-	if partData.Interactables then
-		for _, id in ipairs(partData.Interactables) do
-			if id.ClassName == "ClickDetector" then
-				local cd = Instance.new("ClickDetector")
-				if id.MaxActivationDistance then cd.MaxActivationDistance = id.MaxActivationDistance end
-				cd.Parent = part
-			elseif id.ClassName == "ProximityPrompt" then
-				local pp = Instance.new("ProximityPrompt")
-				pp.ActionText = id.ActionText or "Interact"; pp.ObjectText = id.ObjectText or ""
-				pp.HoldDuration = id.HoldDuration or 0; pp.MaxActivationDistance = id.MaxActivationDistance or 10
-				pp.RequiresLineOfSight = id.RequiresLineOfSight ~= false; pp.Parent = part
-			end
-		end
-	end
-	-- Sounds
-	if partData.Sounds then
-		for _, sd in ipairs(partData.Sounds) do
-			local s = Instance.new("Sound"); s.Name = sd.Name or "Sound"
-			s.SoundId = sd.SoundId or ""; s.Volume = sd.Volume or 0.5; s.PlaybackSpeed = sd.PlaybackSpeed or 1
-			s.Looped = sd.Looped or false
-			if sd.RollOffMode then s.RollOffMode = Enum.RollOffMode[sd.RollOffMode] or Enum.RollOffMode.Inverse end
-			if sd.RollOffMaxDistance then s.RollOffMaxDistance = sd.RollOffMaxDistance end
-			if sd.RollOffMinDistance then s.RollOffMinDistance = sd.RollOffMinDistance end
-			s.Parent = part
-		end
-	end
-	-- ParticleEmitters / Trails / Beams
-	if partData.Effects then
-		for _, ed in ipairs(partData.Effects) do
-			local okE, e = pcall(function() return Instance.new(ed.ClassName) end)
-			if okE and e then
-				if ed.Texture then e.Texture = ed.Texture end
-				if ed.Color then e.Color = ColorSequence.new(ed.Color) end
-				if ed.Size then e.Size = NumberSequence.new(ed.Size) end
-				if ed.Transparency then e.Transparency = NumberSequence.new(ed.Transparency) end
-				if ed.Lifetime then e.Lifetime = NumberRange.new(unpack(ed.Lifetime)) end
-				if ed.Rate then e.Rate = ed.Rate end
-				if ed.Speed then e.Speed = NumberRange.new(unpack(ed.Speed)) end
-				e.Parent = part
-			end
-		end
-	end
-end
 		selectorStatus.Text = string.format("Box-selected %d parts", found)
 	elseif not clickMode and dist <= CONFIG.DragThreshold then
 		if not ctrlHeld then clearSelection() end
@@ -2079,6 +1954,123 @@ local function applyPartProperties(part, partData, targetCF, partMap)
 					end) end
 				end
 			end)
+		end
+	end
+	-- Motor6D (animated joints)
+	if partData.Motor6Ds then
+		for _, md in ipairs(partData.Motor6Ds) do
+			local p0, p1 = partMap and partMap[md.Part0Index], partMap and partMap[md.Part1Index]
+			if p0 and p1 then
+				local m = Instance.new("Motor6D"); m.Part0 = p0; m.Part1 = p1
+				m.C0 = md.C0 and parseCFrame(md.C0) or CFrame.new(); m.C1 = md.C1 and parseCFrame(md.C1) or CFrame.new()
+				m.Name = md.Name or "Motor"; m.Parent = p0
+			end
+		end
+	end
+	-- Constraints (Hinge, BallSocket, Spring, Rod, Rope, SlidingBall)
+	if partData.Constraints then
+		for _, cd in ipairs(partData.Constraints) do
+			local p0, p1 = partMap and partMap[cd.Part0Index], partMap and partMap[cd.Part1Index]
+			if p0 and p1 then
+				local okC, c = pcall(function() return Instance.new(cd.ClassName) end)
+				if okC and c then
+					local a0 = p0:FindFirstChild(cd.Attachment0) or Instance.new("Attachment", p0); a0.Name = cd.Attachment0 or "Attachment"
+					local a1 = p1:FindFirstChild(cd.Attachment1) or Instance.new("Attachment", p1); a1.Name = cd.Attachment1 or "Attachment"
+					c.Attachment0 = a0; c.Attachment1 = a1
+					if cd.LimitsEnabled ~= nil then c.LimitsEnabled = cd.LimitsEnabled end
+					if cd.Restitution ~= nil then c.Restitution = cd.Restitution end
+					if cd.UpperAngle ~= nil then c.UpperAngle = cd.UpperAngle end
+					if cd.LowerAngle ~= nil then c.LowerAngle = cd.LowerAngle end
+					if cd.Stiffness ~= nil then c.Stiffness = cd.Stiffness end
+					if cd.Damping ~= nil then c.Damping = cd.Damping end
+					if cd.FreeLength ~= nil then c.FreeLength = cd.FreeLength end
+					c.Name = cd.Name or cd.ClassName; c.Parent = p0
+				end
+			end
+		end
+	end
+	-- Attachments (for constraints)
+	if partData.Attachments then
+		for _, ad in ipairs(partData.Attachments) do
+			local a = Instance.new("Attachment"); a.Name = ad.Name or "Attachment"
+			if ad.Position then a.Position = parseVector3(ad.Position) end
+			if ad.Orientation then a.Orientation = parseVector3(ad.Orientation) end
+			if ad.Axis then a.Axis = parseVector3(ad.Axis) end
+			if ad.SecondaryAxis then a.SecondaryAxis = parseVector3(ad.SecondaryAxis) end
+			a.Parent = part
+		end
+	end
+	-- AlignPosition / AlignOrientation
+	if partData.AlignConstraints then
+		for _, ald in ipairs(partData.AlignConstraints) do
+			local okA, al = pcall(function() return Instance.new(ald.ClassName) end)
+			if okA and al then
+				al.Mode = ald.Mode or 0; al.Responsiveness = ald.Responsiveness or 10
+				al.MaxForce = ald.MaxForce or 100000; al.MaxVelocity = ald.MaxVelocity or math.huge
+				al.ReactionForceEnabled = ald.ReactionForceEnabled or false; al.RigidityEnabled = ald.RigidityEnabled or false
+				al.Attachment0 = part:FindFirstChild(ald.Attachment0) or Instance.new("Attachment", part)
+				if ald.Attachment1Part and partMap and partMap[ald.Attachment1Part] then
+					al.Attachment1 = partMap[ald.Attachment1Part]:FindFirstChild(ald.Attachment1) or nil
+				end
+				al.Parent = part
+			end
+		end
+	end
+	-- BodyMovers (legacy)
+	if partData.BodyMovers then
+		for _, bd in ipairs(partData.BodyMovers) do
+			local okB, b = pcall(function() return Instance.new(bd.ClassName) end)
+			if okB and b then
+				if bd.MaxForce then b.MaxForce = parseVector3(bd.MaxForce) end
+				if bd.P then b.P = bd.P end; if bd.D then b.D = bd.D end
+				if bd.MaxTorque then b.MaxTorque = parseVector3(bd.MaxTorque) end
+				if bd.CFrame then b.CFrame = parseCFrame(bd.CFrame) end
+				if bd.Position then b.Position = parseVector3(bd.Position) end
+				if bd.Velocity then b.Velocity = parseVector3(bd.Velocity) end
+				b.Parent = part
+			end
+		end
+	end
+	-- ClickDetector / ProximityPrompt
+	if partData.Interactables then
+		for _, id in ipairs(partData.Interactables) do
+			if id.ClassName == "ClickDetector" then
+				local cd = Instance.new("ClickDetector")
+				if id.MaxActivationDistance then cd.MaxActivationDistance = id.MaxActivationDistance end
+				cd.Parent = part
+			elseif id.ClassName == "ProximityPrompt" then
+				local pp = Instance.new("ProximityPrompt")
+				pp.ActionText = id.ActionText or "Interact"; pp.ObjectText = id.ObjectText or ""
+				pp.HoldDuration = id.HoldDuration or 0; pp.MaxActivationDistance = id.MaxActivationDistance or 10
+				pp.RequiresLineOfSight = id.RequiresLineOfSight ~= false; pp.Parent = part
+			end
+		end
+	end
+	-- Sounds
+	if partData.Sounds then
+		for _, sd in ipairs(partData.Sounds) do
+			local s = Instance.new("Sound"); s.Name = sd.Name or "Sound"
+			s.SoundId = sd.SoundId or ""; s.Volume = sd.Volume or 0.5; s.PlaybackSpeed = sd.PlaybackSpeed or 1; s.Looped = sd.Looped or false
+			if sd.RollOffMode then s.RollOffMode = Enum.RollOffMode[sd.RollOffMode] or Enum.RollOffMode.Inverse end
+			if sd.RollOffMaxDistance then s.RollOffMaxDistance = sd.RollOffMaxDistance end
+			if sd.RollOffMinDistance then s.RollOffMinDistance = sd.RollOffMinDistance end
+			s.Parent = part
+		end
+	end
+	-- ParticleEmitters / Trails / Beams
+	if partData.Effects then
+		for _, ed in ipairs(partData.Effects) do
+			local okE, e = pcall(function() return Instance.new(ed.ClassName) end)
+			if okE and e then
+				if ed.Texture then e.Texture = ed.Texture end
+				if ed.Color then e.Color = ColorSequence.new(ed.Color) end
+				if ed.Size then e.Size = NumberSequence.new(ed.Size) end
+				if ed.Transparency then e.Transparency = NumberSequence.new(ed.Transparency) end
+				if ed.Lifetime then e.Lifetime = NumberRange.new(unpack(ed.Lifetime)) end
+				if ed.Rate then e.Rate = ed.Rate end
+				if ed.Speed then e.Speed = NumberRange.new(unpack(ed.Speed)) end
+				e.Parent = part
+			end
 		end
 	end
 end
@@ -2486,9 +2478,7 @@ exportF3XBtn.MouseButton1Click:Connect(function() local ok, err = pcall(function
 								if not child:IsA("PointLight") then cbuf[#cbuf+1] = ',"Face":"'; cbuf[#cbuf+1] = tostring(child.Face); cbuf[#cbuf+1] = '"' end
 								if child:IsA("SurfaceLight") or child:IsA("SpotLight") then cbuf[#cbuf+1] = ',"Angle":'; cbuf[#cbuf+1] = string.format("%.4f", child.Angle) end
 								cbuf[#cbuf+1] = '}'; cc += 1; cj[cc] = table.concat(cbuf)
-							end
 						end
-				end
 					end
 					if incWelds then
 						local wj = {}; local wc = 0
@@ -2528,9 +2518,6 @@ exportF3XBtn.MouseButton1Click:Connect(function() local ok, err = pcall(function
 						end
 					end
 					if extN > 0 then pp(',"ExtraChildren":['); pp(table.concat(extC, ",")); pp(']') end
-						end
-						if wc > 0 then pp(',"Welds":['); pp(table.concat(wj, ",")); pp(']') end
-					end
 					pp('}'); return table.concat(pb)
 				end)
 				if partOk then if i > si then push(",") end; push(partJson) else warn("[Export] Part", i, "failed:", tostring(partJson)); if i > si then push(",") end; push('{"Index":'..tostring(i)..',"Name":'..string.format("%q",part.Name)..',"Error":'..string.format("%q",tostring(partJson):sub(1,200))..'}') end
