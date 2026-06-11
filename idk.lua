@@ -1279,24 +1279,12 @@ end)
 local function applyF3XMesh(part, meshData)
 	if not part or not part:FindFirstAncestorOfClass("DataModel") then return false end
 	local existingMesh = part:FindFirstChildOfClass("SpecialMesh")
-	if existingMesh then
-		local alreadyCorrect = true
-		if meshData.MeshType and existingMesh.MeshType ~= meshData.MeshType then alreadyCorrect = false end
-		if meshData.MeshId and existingMesh.MeshId ~= meshData.MeshId then alreadyCorrect = false end
-		if meshData.TextureId and existingMesh.TextureId ~= meshData.TextureId then alreadyCorrect = false end
-		if meshData.Scale and existingMesh.Scale ~= meshData.Scale then alreadyCorrect = false end
-		if meshData.Offset and existingMesh.Offset ~= meshData.Offset then alreadyCorrect = false end
-		if alreadyCorrect then return true end
-		pcall(function() F3X:Invoke("Remove", {existingMesh}) end)
-	end
-	local createOk = pcall(function() return F3X:Invoke("CreateMeshes", {{Part = part}}) end)
-	if not createOk then if CONFIG.Debug then warn("CreateMeshes failed for", part.Name) end; return false end
 	local mc = {Part = part}
 	for k, v in pairs(meshData) do if k ~= "_meshCount" then mc[k] = v end end
-	local syncOk = pcall(function() return F3X:Invoke("SyncMesh", {mc}) end)
-	if not syncOk then if CONFIG.Debug then warn("SyncMesh failed for", part.Name) end; return false end
-	if not part:FindFirstChildOfClass("SpecialMesh") then if CONFIG.Debug then warn("Mesh not found after SyncMesh") end; return false end
-	return true
+	if not existingMesh then
+		pcall(function() F3X:Invoke("CreateMeshes", {{Part = part}}) end)
+	end
+	return pcall(function() F3X:Invoke("SyncMesh", {mc}) end)
 end
 local function applyPartProperties(part, partData, cf, partMap)
 	local resizeChanges = {}; local colorChanges = {}; local materialChanges = {}
