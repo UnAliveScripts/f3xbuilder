@@ -113,7 +113,9 @@ local function dprint(...)
 	if CONFIG.Debug then print("[F3X System]", ...) end
 end
 
--- 3. CONFIG PERSISTENCE
+-- 3. CONFIG PERSISTENCE + BUILD QUEUE
+local buildQueue = {}
+local queueActive = false
 local CONFIG_FILE = CONFIG.LocalFolder .. "/build_config.json"
 
 local function saveConfig()
@@ -147,6 +149,60 @@ local function loadConfig()
 end
 
 loadConfig()
+
+-- Btool helper functions (must be before F3X table)
+local function hasBuildingTool()
+	local backpack = player:FindFirstChild("Backpack")
+	local char = player.Character or player.CharacterAdded:Wait()
+	local function check(c)
+		if not c then return nil end
+		for _, item in ipairs(c:GetChildren()) do
+			if item:IsA("Tool") and (item.Name:find("Building") or item.Name:find("F3X") or item:FindFirstChild("SyncAPI")) then return item end
+		end
+		return nil
+	end
+	return check(backpack) or check(char)
+end
+
+local function equipBuildingTool()
+	local backpack = player:FindFirstChild("Backpack")
+	local char = player.Character or player.CharacterAdded:Wait()
+	local tool = nil
+	if backpack then
+		for _, item in ipairs(backpack:GetChildren()) do
+			if item:IsA("Tool") and (item.Name:find("Building") or item.Name:find("F3X") or item:FindFirstChild("SyncAPI")) then tool = item; break end
+		end
+	end
+	if not tool then
+		for _, item in ipairs(char:GetChildren()) do
+			if item:IsA("Tool") and (item.Name:find("Building") or item.Name:find("F3X") or item:FindFirstChild("SyncAPI")) then tool = item; break end
+		end
+	end
+	if tool and tool.Parent == backpack then char.Humanoid:EquipTool(tool) end
+	return tool ~= nil
+end
+
+local function sendBtoolsCommand()
+	local success = false
+	pcall(function()
+		local tc = TextChatService:FindFirstChild("TextChannels")
+		if tc then
+			local rb = tc:FindFirstChild("RBXGeneral")
+			if rb then rb:SendAsync(";btools"); success = true end
+		end
+	end)
+	if not success then pcall(function() Players:Chat(";btools"); success = true end) end
+	return success
+end
+
+local function waitForBtools(timeout)
+	local elapsed = 0
+	while elapsed < timeout do
+		if hasBuildingTool() then return true end
+		task.wait(0.5); elapsed += 0.5
+	end
+	return hasBuildingTool()
+end
 
 -- 4. F3X API WRAPPER (Full SyncAPI Coverage)
 local F3X = {}
@@ -252,40 +308,8 @@ function F3X:SetLocked(items, locked)
 	return self:Invoke("SetLocked", items, locked)
 end
 
--- Config persistence
-local CONFIG_FILE = SAVE_FOLDER .. "/build_config.json"
-
-local function saveConfig()
-	if not hasFileAccess then return end
-	local configData = {
-		BuildAnchored = CONFIG.BuildAnchored,
-		BuildSpeed = CONFIG.BuildSpeed,
-		BatchSize = CONFIG.BatchSize,
-		HyperThreads = CONFIG.HyperThreads,
-		LocalFolder = CONFIG.LocalFolder,
-		GitHubRepo = CONFIG.GitHubRepo,
-	}
-	local ok, json = pcall(function() return HttpService:JSONEncode(configData) end)
-	if ok then pcall(function() writefile(CONFIG_FILE, json) end) end
-end
-
-local function loadConfig()
-	if not hasFileAccess then return end
-	local ok, content = pcall(function() return readfile(CONFIG_FILE) end)
-	if ok and content and #content > 0 then
-		local parseOk, data = pcall(function() return HttpService:JSONDecode(content) end)
-		if parseOk and type(data) == "table" then
-			if data.BuildAnchored ~= nil then CONFIG.BuildAnchored = data.BuildAnchored end
-			if data.BuildSpeed ~= nil then CONFIG.BuildSpeed = data.BuildSpeed end
-			if data.BatchSize ~= nil then CONFIG.BatchSize = data.BatchSize end
-			if data.HyperThreads ~= nil then CONFIG.HyperThreads = data.HyperThreads end
-			if data.LocalFolder then CONFIG.LocalFolder = data.LocalFolder end
-			if data.GitHubRepo then CONFIG.GitHubRepo = data.GitHubRepo end
-		end
-	end
-end
-
-loadConfig()
+		
+-- 4. DATA PARSERS
 local function parseCFrame(data)
 	if not data then return CFrame.new(0, 10, 0) end
 	if typeof(data) == "CFrame" then return data end
@@ -977,16 +1001,44 @@ scaleBox.FocusLost:Connect(function()
 end)
 
 local buildBtn = Instance.new("TextButton")
-buildBtn.Size = UDim2.new(1, 0, 0, 40)
+buildBtn.Size = UDim2.new(0.48, -2, 0, 40)
 buildBtn.Position = UDim2.new(0, 0, 1, -44)
 buildBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 80)
-buildBtn.Text = "🔨 Build Selected"
+buildBtn.Text = "🔨 Build"
 buildBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 buildBtn.TextSize = 15
 buildBtn.Font = Enum.Font.GothamBold
 buildBtn.Visible = false
 Instance.new("UICorner", buildBtn).CornerRadius = UDim.new(0, 8)
 buildBtn.Parent = builderFrame
+
+local queueBtn = Instance.new("TextButton")
+queueBtn.Size = UDim2.new(0.48, -2, 0, 40)
+queueBtn.Position = UDim2.new(0.52, 4, 1, -44)
+queueBtn.BackgroundColor3 = Color3.fromRGB(0, 100, 200)
+queueBtn.Text = "📋 Queue"
+queueBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+queueBtn.TextSize = 15
+queueBtn.Font = Enum.Font.GothamBold
+queueBtn.Visible = false
+Instance.new("UICorner", queueBtn).CornerRadius = UDim.new(0, 8)
+queueBtn.Parent = builderFrame
+
+local buildAllBtn = Instance.new("TextButton")
+buildAllBtn.Size = UDim2.new(1, 0, 0, 36)
+buildAllBtn.Position = UDim2.new(0, 0, 1, -88)
+buildAllBtn.BackgroundColor3 = Color3.fromRGB(180, 80, 0)
+buildAllBtn.Text = "▶️ Build All (%d in queue)"
+buildAllBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+buildAllBtn.TextSize = 12
+buildAllBtn.Font = Enum.Font.GothamBold
+buildAllBtn.Visible = false
+Instance.new("UICorner", buildAllBtn).CornerRadius = UDim.new(0, 8)
+buildAllBtn.Parent = builderFrame
+
+local function refreshQueueUI()
+	buildAllBtn.Text = string.format("▶️ Build All (%d in queue)", #buildQueue)
+end
 
 -- ==================== SELECTOR TAB ====================
 local selectorFrame = Instance.new("Frame")
@@ -1512,59 +1564,6 @@ end)
 clearSelBtn.MouseButton1Click:Connect(function() local ok, err = pcall(function() clearSelection(); notify("Selection cleared") end) if not ok then warn("[F3X] Error:", err) end end)
 
 -- 7. BUILD AUTOMATION (btools, equip, teleport)
-local function hasBuildingTool()
-	local backpack = player:FindFirstChild("Backpack")
-	local char = player.Character or player.CharacterAdded:Wait()
-	local function check(c)
-		if not c then return nil end
-		for _, item in ipairs(c:GetChildren()) do
-			if item:IsA("Tool") and (item.Name:find("Building") or item.Name:find("F3X") or item:FindFirstChild("SyncAPI")) then return item end
-		end
-		return nil
-	end
-	return check(backpack) or check(char)
-end
-
-local function equipBuildingTool()
-	local backpack = player:FindFirstChild("Backpack")
-	local char = player.Character or player.CharacterAdded:Wait()
-	local tool = nil
-	if backpack then
-		for _, item in ipairs(backpack:GetChildren()) do
-			if item:IsA("Tool") and (item.Name:find("Building") or item.Name:find("F3X") or item:FindFirstChild("SyncAPI")) then tool = item; break end
-		end
-	end
-	if not tool then
-		for _, item in ipairs(char:GetChildren()) do
-			if item:IsA("Tool") and (item.Name:find("Building") or item.Name:find("F3X") or item:FindFirstChild("SyncAPI")) then tool = item; break end
-		end
-	end
-	if tool and tool.Parent == backpack then char.Humanoid:EquipTool(tool) end
-	return tool ~= nil
-end
-
-local function sendBtoolsCommand()
-	local success = false
-	pcall(function()
-		local tc = TextChatService:FindFirstChild("TextChannels")
-		if tc then
-			local rb = tc:FindFirstChild("RBXGeneral")
-			if rb then rb:SendAsync(";btools"); success = true end
-		end
-	end)
-	if not success then pcall(function() Players:Chat(";btools"); success = true end) end
-	return success
-end
-
-local function waitForBtools(timeout)
-	local elapsed = 0
-	while elapsed < timeout do
-		if hasBuildingTool() then return true end
-		task.wait(0.5); elapsed += 0.5
-	end
-	return hasBuildingTool()
-end
-
 local function calculateBuildCenter(parts)
 	if not parts or #parts == 0 then return Vector3.new(0, 50, 0) end
 	local sx, sy, sz, cnt = 0, 0, 0, 0
@@ -1881,7 +1880,7 @@ local function addLocalFile(filename)
 			if parseOk then
 				selectedBuildData = data; selectedBuildName = filename:match("([^/\\]+)$")
 				statusLabel.Text = "Selected: " .. selectedBuildName .. " (" .. (data.PartCount or #data.Parts) .. " parts)"
-				buildBtn.Visible = true
+				buildBtn.Visible = true; queueBtn.Visible = true; refreshQueueUI()
 				notify("Loaded: " .. selectedBuildName)
 			else notify("Invalid JSON!") end
 		else notify("Failed to read file!") end
@@ -1959,7 +1958,7 @@ local function addGithubFile(name, url)
 			if parseOk then
 				selectedBuildData = data; selectedBuildName = name
 				statusLabel.Text = "Selected: " .. name .. " (" .. (data.PartCount or #data.Parts) .. " parts)"
-				buildBtn.Visible = true; notify("Loaded: " .. name)
+				buildBtn.Visible = true; queueBtn.Visible = true; refreshQueueUI(); notify("Loaded: " .. name)
 				pcall(function() if not isfolder(CONFIG.LocalFolder) then makefolder(CONFIG.LocalFolder) end; writefile(CONFIG.LocalFolder .. "/" .. name, content) end)
 			else notify("Invalid JSON!"); statusLabel.Text = "Invalid JSON" end
 		else notify("Download failed!"); statusLabel.Text = "Download failed" end
@@ -2272,16 +2271,18 @@ local function refreshHistory()
 end
 
 -- 13. MAIN BUILD TRIGGER
-buildBtn.MouseButton1Click:Connect(function() local ok, err = pcall(function()
-	if not selectedBuildData then notify("No build selected!"); return end
-	local parts = selectedBuildData.Parts
+
+local function doBuild(name, data, isQueueItem)
+	if not data then notify("No build data!"); return end
+	local parts = data.Parts
 	if not parts or typeof(parts) ~= "table" then notify("Invalid build data!"); return end
 
 	CONFIG.BuildSpeed = speedSlider.Get()
 	CONFIG.BatchSize = batchSlider.Get()
 	CONFIG.HyperThreads = threadSlider.Get()
 
-	buildBtn.Visible = false; progressFrame.Visible = true; progressFill.Size = UDim2.new(0, 0, 1, 0)
+	if not isQueueItem then buildBtn.Visible = false; queueBtn.Visible = false; buildAllBtn.Visible = false end
+	progressFrame.Visible = true; progressFill.Size = UDim2.new(0, 0, 1, 0)
 
 	local buildCenter = calculateBuildCenter(parts)
 	statusLabel.Text = "Teleporting..."; teleportToBuild(buildCenter); notify("Teleported!"); task.wait(0.5)
@@ -2289,7 +2290,7 @@ buildBtn.MouseButton1Click:Connect(function() local ok, err = pcall(function()
 	if not hasBuildingTool() then
 		statusLabel.Text = "Requesting btools..."; notify("Sending ;btools...")
 		local sent = sendBtoolsCommand()
-		if not sent then notify("Chat failed!"); progressFrame.Visible = false; buildBtn.Visible = true; statusLabel.Text = "Chat failed"; return end
+		if not sent then notify("Chat failed!"); progressFrame.Visible = false; if not isQueueItem then buildBtn.Visible = true; queueBtn.Visible = true; buildAllBtn.Visible = #buildQueue > 0 end; statusLabel.Text = "Chat failed"; return end
 		local received = waitForBtools(CONFIG.BtoolsTimeout)
 		if not received then
 			for retry = 1, 3 do
@@ -2298,14 +2299,14 @@ buildBtn.MouseButton1Click:Connect(function() local ok, err = pcall(function()
 				if received then break end
 			end
 		end
-		if not received then notify("Failed to get btools! Try ;btools manually."); progressFrame.Visible = false; buildBtn.Visible = true; statusLabel.Text = "Timed out"; return end
+		if not received then notify("Failed to get btools! Try ;btools manually."); progressFrame.Visible = false; if not isQueueItem then buildBtn.Visible = true; queueBtn.Visible = true; buildAllBtn.Visible = #buildQueue > 0 end; statusLabel.Text = "Timed out"; return end
 	end
 
 	statusLabel.Text = "Equipping tools..."
-	if not equipBuildingTool() then notify("Failed to equip!"); progressFrame.Visible = false; buildBtn.Visible = true; return end
+	if not equipBuildingTool() then notify("Failed to equip!"); progressFrame.Visible = false; if not isQueueItem then buildBtn.Visible = true; queueBtn.Visible = true; buildAllBtn.Visible = #buildQueue > 0 end; return end
 	task.wait(0.5)
 
-	if not F3X:Init() then notify("F3X init failed!"); progressFrame.Visible = false; buildBtn.Visible = true; return end
+	if not F3X:Init() then notify("F3X init failed!"); progressFrame.Visible = false; if not isQueueItem then buildBtn.Visible = true; queueBtn.Visible = true; buildAllBtn.Visible = #buildQueue > 0 end; return end
 
 	local total = #parts
 	local partMap = {}
@@ -2313,10 +2314,10 @@ buildBtn.MouseButton1Click:Connect(function() local ok, err = pcall(function()
 	local failedCount = 0
 
 	statusLabel.Text = string.format("Building %d parts...", total)
-	notify("Starting: " .. selectedBuildName)
+	notify("Starting: " .. name)
 
-	if selectedBuildData.Models then
-		for ref, info in pairs(selectedBuildData.Models) do
+	if data.Models then
+		for ref, info in pairs(data.Models) do
 			local model
 			local ok, res = pcall(function() return F3X:CreateGroup(info.ClassName or "Model", workspace, {}) end)
 			if ok and res then model = res; pcall(function() F3X:SetName({model}, info.Name or "Model") end)
@@ -2346,9 +2347,9 @@ buildBtn.MouseButton1Click:Connect(function() local ok, err = pcall(function()
 		for target, plist in pairs(parentGroups) do pcall(function() F3X:SetParent(plist, target) end) end
 	end
 
-	if selectedBuildData.Welds then
+	if data.Welds then
 		statusLabel.Text = "Applying welds..."
-		for _, wd in ipairs(selectedBuildData.Welds) do
+		for _, wd in ipairs(data.Welds) do
 			if wd.Part0Index and wd.Part1Index then
 				local p0, p1 = partMap[wd.Part0Index], partMap[wd.Part1Index]
 				if p0 and p1 then pcall(function()
@@ -2380,7 +2381,6 @@ buildBtn.MouseButton1Click:Connect(function() local ok, err = pcall(function()
 		end
 	end
 
-	-- Post-build validation
 	local builtCount = 0
 	for i, part in pairs(partMap) do
 		if part and part:FindFirstAncestorOfClass("DataModel") then builtCount += 1 end
@@ -2391,12 +2391,47 @@ buildBtn.MouseButton1Click:Connect(function() local ok, err = pcall(function()
 		notify(string.format("✅ All %d parts confirmed", builtCount))
 	end
 
-	progressFill.Size = UDim2.new(1, 0, 1, 0); task.wait(0.5); progressFrame.Visible = false; buildBtn.Visible = true
+	progressFill.Size = UDim2.new(1, 0, 1, 0); task.wait(0.5); progressFrame.Visible = false
+	if not isQueueItem then
+		buildBtn.Visible = true; queueBtn.Visible = true; buildAllBtn.Visible = #buildQueue > 0
+	end
 
-	addHistory(selectedBuildName, total, failedCount)
+	addHistory(name, total, failedCount)
 	local msg = string.format("✅ Built %d/%d!%s%s", total-failedCount, total, CONFIG.BuildAnchored and " [ALL ANCHORED]" or " [AS ORIGINAL]", CONFIG.HyperMode and " [HYPER]" or "")
 	if failedCount > 0 then msg = msg .. string.format(" (%d failed)", failedCount) end
 	statusLabel.Text = msg; notify(msg)
+end
+
+buildBtn.MouseButton1Click:Connect(function() local ok, err = pcall(function()
+	doBuild(selectedBuildName, selectedBuildData, false)
+end) if not ok then warn("[F3X] Error:", err) end end)
+
+queueBtn.MouseButton1Click:Connect(function() local ok, err = pcall(function()
+	if not selectedBuildData then notify("No build selected!"); return end
+	table.insert(buildQueue, {Name = selectedBuildName, Data = selectedBuildData})
+	notify(string.format("📋 Queued: %s (%d in queue)", selectedBuildName, #buildQueue))
+	buildAllBtn.Visible = true
+	refreshQueueUI()
+end) if not ok then warn("[F3X] Error:", err) end end)
+
+buildAllBtn.MouseButton1Click:Connect(function() local ok, err = pcall(function()
+	if #buildQueue == 0 then notify("Queue is empty!"); return end
+	queueActive = true
+	buildBtn.Visible = false; queueBtn.Visible = false; buildAllBtn.Visible = false
+	notify(string.format("▶️ Building queue (%d items)...", #buildQueue))
+	task.spawn(function()
+		while #buildQueue > 0 do
+			local item = table.remove(buildQueue, 1)
+			refreshQueueUI()
+			statusLabel.Text = string.format("Queue: building %s (%d remaining)", item.Name, #buildQueue)
+			doBuild(item.Name, item.Data, true)
+			task.wait(1)
+		end
+		queueActive = false
+		buildBtn.Visible = true; queueBtn.Visible = true
+		notify("✅ Queue completed!")
+		statusLabel.Text = "All queued builds completed."
+	end)
 end) if not ok then warn("[F3X] Error:", err) end end)
 
 -- 14. INIT
