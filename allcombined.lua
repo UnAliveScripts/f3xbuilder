@@ -263,8 +263,6 @@ function F3X:ValidateTool()
 end
 
 function F3X:CreatePart(partType, cframe)
-	if partType == "Vehicle Seat" then partType = "VehicleSeat"
-	elseif partType == "VehicleSeat" then partType = "Vehicle Seat" end
 	return self:Invoke("CreatePart", partType or "Normal", cframe or CFrame.new(0, 5000, 0), workspace)
 end
 function F3X:SyncMove(ch) return self:Invoke("SyncMove", ch) end
@@ -343,11 +341,15 @@ end
 
 local function parseEnum(enumType, str)
 	if not str then return enumType:GetEnumItems()[1] end
-	local name = str:match("Enum%.(%w+)%.(.+)")
-	if name then
-		for _, e in ipairs(Enum[name]:GetEnumItems()) do if e.Name == str:match("Enum%."..name.."%.(.+)") then return e end end
+	local enumName, itemName = str:match("Enum%.(%w+)%.(.+)")
+	if enumName and itemName then
+		local ok, enum = pcall(function() return Enum[enumName] end)
+		if ok and enum then
+			local ok2, item = pcall(function() return enum[itemName] end)
+			if ok2 and item then return item end
+		end
 	end
-	for _, e in ipairs(enumType:GetEnumItems()) do if e.Name == str or e.Name == name then return e end end
+	for _, e in ipairs(enumType:GetEnumItems()) do if e.Name == str then return e end end
 	return enumType:GetEnumItems()[1]
 end
 
@@ -1635,7 +1637,7 @@ local function applyPartProperties(part, partData, targetCF, partMap)
 
 	if partData.CastShadow ~= nil then part.CastShadow = partData.CastShadow end
 	if partData.Shape then pcall(function() part.Shape = parseShape(partData.Shape) end) end
-	if partData.Massless then part.Massless = true end
+	if partData.Massless ~= nil then part.Massless = partData.Massless end
 	if partData.CollisionGroupId then part.CollisionGroupId = partData.CollisionGroupId end
 
 	if partData.CustomPhysicalProperties then
@@ -1716,7 +1718,7 @@ local function applyPartProperties(part, partData, targetCF, partMap)
 					if p0 and p1 then pcall(function()
 						local weldObj = F3XRetry("CreateWelds", {p0}, p1)
 					if not weldObj or typeof(weldObj) ~= "Instance" then
-						local containers = {p0, p1, p0.Parent, p1.Parent, workspace}
+						local containers = {p1, p0, p1.Parent, p0.Parent}
 						for _, ctn in ipairs(containers) do
 							if ctn then
 								for _, child in ipairs(ctn:GetChildren()) do
@@ -2355,7 +2357,7 @@ local function doBuild(name, data, isQueueItem)
 				if p0 and p1 then pcall(function()
 					local weldObj = F3XRetry("CreateWelds", {p0}, p1)
 					if not weldObj or typeof(weldObj) ~= "Instance" then
-						local containers = {p0, p1, p0.Parent, p1.Parent, workspace}
+						local containers = {p1, p0, p1.Parent, p0.Parent}
 						for _, ctn in ipairs(containers) do
 							if ctn then
 								for _, child in ipairs(ctn:GetChildren()) do
