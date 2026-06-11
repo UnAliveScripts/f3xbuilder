@@ -1277,26 +1277,29 @@ end)
 
 -- ==================== 10. PROPERTY APPLIER ====================
 local function applyF3XMesh(part, meshData)
-	pcall(function()
-		for _, child in ipairs(part:GetChildren()) do
-			if child:IsA("SpecialMesh") or child:IsA("BlockMesh") or child:IsA("CylinderMesh") then child:Destroy() end
-		end
-	end)
-	task.wait()
+	if not part or not part:FindFirstAncestorOfClass("DataModel") then return false end
+	local existingMesh = part:FindFirstChildOfClass("SpecialMesh")
+	if existingMesh then
+		local correct = true
+		if meshData.MeshType and existingMesh.MeshType ~= meshData.MeshType then correct = false end
+		if meshData.MeshId and existingMesh.MeshId ~= meshData.MeshId then correct = false end
+		if meshData.TextureId and existingMesh.TextureId ~= meshData.TextureId then correct = false end
+		if meshData.Scale and existingMesh.Scale ~= meshData.Scale then correct = false end
+		if meshData.Offset and existingMesh.Offset ~= meshData.Offset then correct = false end
+		if correct then return true end
+	end
 	local mc = {Part = part}
 	for k, v in pairs(meshData) do if k ~= "_meshCount" then mc[k] = v end end
-	F3XRetry("CreateMeshes", {part})
-	local mesh = nil; local waitStart = tick()
-	while not mesh and (tick() - waitStart) < 0.5 do
-		mesh = part:FindFirstChildOfClass("SpecialMesh"); if not mesh then task.wait() end
+	if not existingMesh then
+		pcall(function() F3X:Invoke("CreateMeshes", {{Part = part}}) end)
 	end
-	if mesh then
-		F3XRetry("SyncMesh", {mc})
-		task.wait(0.03)
-		local vm = part:FindFirstChildOfClass("SpecialMesh")
-		if vm then for k, v in pairs(meshData) do if k ~= "_meshCount" then pcall(function() vm[k] = v end) end end end
-	end
-	task.wait(0.03)
+	local syncOk = pcall(function() F3X:Invoke("SyncMesh", {mc}) end)
+	if not syncOk then return false end
+	local vm = part:FindFirstChildOfClass("SpecialMesh")
+	if not vm then return false end
+	if meshData.MeshType and vm.MeshType ~= meshData.MeshType then return false end
+	if meshData.MeshId and vm.MeshId ~= meshData.MeshId then return false end
+	return true
 end
 local function applyPartProperties(part, partData, cf, partMap)
 	local resizeChanges = {}; local colorChanges = {}; local materialChanges = {}
@@ -1359,16 +1362,10 @@ local function applyPartProperties(part, partData, cf, partMap)
 
 	local className = partData.ClassName or "Part"
 	if className == "MeshPart" then
-		if partData.MeshId and isValidAssetUrl(partData.MeshId) then pcall(function() part.MeshId = partData.MeshId end) end
-		if partData.TextureID and isValidAssetUrl(partData.TextureID) then pcall(function() part.TextureID = partData.TextureID end) end
-		if partData.RenderFidelity then pcall(function()
-			local name = tostring(partData.RenderFidelity):gsub("Enum%.RenderFidelity%.", "")
-			part.RenderFidelity = Enum.RenderFidelity[name]
-		end) end
-		if partData.CollisionFidelity then pcall(function()
-			local name = tostring(partData.CollisionFidelity):gsub("Enum%.CollisionFidelity%.", "")
-			part.CollisionFidelity = Enum.CollisionFidelity[name]
-		end) end
+		-- F3X can only create Parts, so create a SpecialMesh(FileMesh) child
+		if partData.MeshId and isValidAssetUrl(partData.MeshId) then
+			applyF3XMesh(part, {MeshType = Enum.MeshType.FileMesh, MeshId = partData.MeshId, TextureId = partData.TextureID or "", Scale = Vector3.new(1, 1, 1), Offset = Vector3.new(0, 0, 0)})
+		end
 	end
 
 	if partData.Children then
@@ -1502,11 +1499,11 @@ local function normalBuild(parts, total, partMap)
 				if cd.ClassName == "SpecialMesh" or cd.ClassName == "BlockMesh" or cd.ClassName == "CylinderMesh" then hasMesh = true; break end
 			end
 		end
-		local effectiveSpeed = hasMesh and math.max(buildSpeed, 0.02) or buildSpeed
+		if hasMesh then task.wait(0.03) end
 		if i % batchSize == 0 or i == total then
 			progressFill.Size = UDim2.new(i / total, 0, 1, 0)
-			statusLabel.Text = string.format("Building... %d/%d parts (%d failed) [batch:%d delay:%.4fs]", i, total, failedCount, batchSize, effectiveSpeed)
-			if effectiveSpeed > 0 then task.wait(effectiveSpeed) end
+			statusLabel.Text = string.format("Building... %d/%d parts (%d failed) [batch:%d delay:%.4fs]", i, total, failedCount, batchSize, buildSpeed)
+			if buildSpeed > 0 then task.wait(buildSpeed) end
 		end
 	end
 	return failedCount
@@ -1539,13 +1536,13 @@ local function hyperBuild(parts, total, partMap)
 					if cd.ClassName == "SpecialMesh" or cd.ClassName == "BlockMesh" or cd.ClassName == "CylinderMesh" then hasMesh = true; break end
 				end
 			end
-			local effectiveSpeed = hasMesh and math.max(buildSpeed, 0.02) or buildSpeed
+			if hasMesh then task.wait(0.03) end
 			completedCount = completedCount + 1
 			if completedCount % (batchSize * threadCount) == 0 or completedCount >= total then
 				progressFill.Size = UDim2.new(completedCount / total, 0, 1, 0)
 				statusLabel.Text = string.format("?? HYPER BUILD... %d/%d parts (%d failed) [threads:%d]", completedCount, total, failedCount, threadCount)
 			end
-			if effectiveSpeed > 0 then task.wait(effectiveSpeed) end
+			if buildSpeed > 0 then task.wait(buildSpeed) end
 		end
 	end
 	local threads = {}; for t = 1, threadCount do threads[t] = task.spawn(function() buildChunk(chunks[t]) end) end
@@ -2225,6 +2222,13 @@ end)
 -- ==================== 15. BUILD QUEUE ====================
 local buildQueue = {}; local isBuilding = false
 
+local goToBuildBtn = Instance.new("TextButton")
+goToBuildBtn.Size = UDim2.new(1, -20, 0, 30); goToBuildBtn.Position = UDim2.new(0, 10, 1, -78)
+goToBuildBtn.BackgroundColor3 = THEME.Accent; goToBuildBtn.Text = "?? Go to Build"
+goToBuildBtn.TextColor3 = THEME.TextPrimary; goToBuildBtn.TextSize = 12; goToBuildBtn.Font = Enum.Font.GothamBold
+goToBuildBtn.AutoButtonColor = true; goToBuildBtn.Visible = false
+Instance.new("UICorner", goToBuildBtn).CornerRadius = UDim.new(0, 6); goToBuildBtn.Parent = mainFrame
+
 local function processQueue()
 	if isBuilding then return end
 	while #buildQueue > 0 do
@@ -2430,10 +2434,7 @@ local function f3xConnect()
 					elseif cmd == "SetLocked" then
 						return F3X:Invoke("SetLocked", args[1], args[2])
 					elseif cmd == "CreateMeshes" then
-						-- Try raw parts: {part1, part2, ...}
-						local ok1, r1 = pcall(function() return F3X:Invoke("CreateMeshes", args[1]) end)
-						if ok1 and r1 then return r1 end
-						-- Try wrapped: {{Part = p1}, {Part = p2}, ...}
+						-- F3X expects {{Part = p1}, {Part = p2}, ...}
 						local c = {}
 						for _, p in ipairs(args[1]) do c[#c + 1] = {Part = p} end
 						return F3X:Invoke("CreateMeshes", c)
