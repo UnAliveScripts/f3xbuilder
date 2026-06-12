@@ -1970,8 +1970,10 @@ exportBuildToJSON = function(buildParts)
 					pp(',"Children":['); local childCount = 0
 					local function ac(s) if childCount > 0 then pp(",") end; childCount = childCount + 1; pcall(function() pp(s) end) end
 					for _, child in ipairs(part:GetChildren()) do
-						if child:IsA("Decal") or child:IsA("Texture") then
-							ac('{"ClassName":"' .. child.ClassName .. '","Texture":"' .. child.Texture:gsub('"', '\\"') .. '","Face":"' .. tostring(child.Face) .. '","Transparency":' .. string.format("%.4f", child.Transparency) .. '}')
+						if child:IsA("Decal") then
+							ac('{"ClassName":"Decal","Texture":"' .. child.Texture:gsub('"', '\\"') .. '","Face":"' .. tostring(child.Face) .. '","Transparency":' .. string.format("%.4f", child.Transparency) .. '}')
+						elseif child:IsA("Texture") then
+							ac('{"ClassName":"Texture","Texture":"' .. child.Texture:gsub('"', '\\"') .. '","Face":"' .. tostring(child.Face) .. '","Transparency":' .. string.format("%.4f", child.Transparency) .. ',"StudsPerTileU":' .. string.format("%.4f", child.StudsPerTileU) .. ',"StudsPerTileV":' .. string.format("%.4f", child.StudsPerTileV) .. '}')
 						elseif child:IsA("SpecialMesh") then
 							local j = '{"ClassName":"SpecialMesh"'
 							local mt; pcall(function() mt = tostring(child.MeshType):gsub("Enum%.MeshType%.", "") end)
@@ -1983,6 +1985,8 @@ exportBuildToJSON = function(buildParts)
 							local sx, sy, sz = 1, 1, 1; pcall(function() sx, sy, sz = child.Scale.X, child.Scale.Y, child.Scale.Z end)
 							local ox, oy, oz = 0, 0, 0; pcall(function() ox, oy, oz = child.Offset.X, child.Offset.Y, child.Offset.Z end)
 							j = j .. ',"Scale":[' .. string.format("%.4f,%.4f,%.4f", sx, sy, sz) .. '],"Offset":[' .. string.format("%.4f,%.4f,%.4f", ox, oy, oz) .. ']'
+							local vc; pcall(function() vc = child.VertexColor end)
+							if vc and vc.X > 0 and vc.Y > 0 and vc.Z > 0 and (vc.X ~= 1 or vc.Y ~= 1 or vc.Z ~= 1) then j = j .. ',"VertexColor":[' .. string.format("%.4f,%.4f,%.4f", vc.X, vc.Y, vc.Z) .. ']' end
 							ac(j .. '}')
 						elseif child:IsA("BlockMesh") then
 							local j = '{"ClassName":"BlockMesh"'
@@ -1995,7 +1999,48 @@ exportBuildToJSON = function(buildParts)
 							local sx, sy, sz = 1, 1, 1; pcall(function() sx, sy, sz = child.Scale.X, child.Scale.Y, child.Scale.Z end)
 							local ox, oy, oz = 0, 0, 0; pcall(function() ox, oy, oz = child.Offset.X, child.Offset.Y, child.Offset.Z end)
 							j = j .. ',"Scale":[' .. string.format("%.4f,%.4f,%.4f", sx, sy, sz) .. '],"Offset":[' .. string.format("%.4f,%.4f,%.4f", ox, oy, oz) .. ']'
-							ac(j .. '}') end
+							ac(j .. '}')
+						elseif child:IsA("SpotLight") then
+							local j = '{"ClassName":"SpotLight"'
+							pcall(function() j = j .. ',"Color":[' .. string.format("%.4f,%.4f,%.4f", child.Color.R, child.Color.G, child.Color.B) .. ']' end)
+							pcall(function() j = j .. ',"Brightness":' .. tostring(child.Brightness) end)
+							pcall(function() j = j .. ',"Range":' .. tostring(child.Range) end)
+							pcall(function() j = j .. ',"Angle":' .. tostring(child.Angle) end)
+							pcall(function() j = j .. ',"Shadows":' .. tostring(child.Shadows) end)
+							pcall(function() j = j .. ',"Face":"' .. tostring(child.Face) .. '"' end)
+							ac(j .. '}')
+						elseif child:IsA("PointLight") then
+							local j = '{"ClassName":"PointLight"'
+							pcall(function() j = j .. ',"Color":[' .. string.format("%.4f,%.4f,%.4f", child.Color.R, child.Color.G, child.Color.B) .. ']' end)
+							pcall(function() j = j .. ',"Brightness":' .. tostring(child.Brightness) end)
+							pcall(function() j = j .. ',"Range":' .. tostring(child.Range) end)
+							pcall(function() j = j .. ',"Shadows":' .. tostring(child.Shadows) end)
+							ac(j .. '}')
+						elseif child:IsA("SurfaceLight") then
+							local j = '{"ClassName":"SurfaceLight"'
+							pcall(function() j = j .. ',"Color":[' .. string.format("%.4f,%.4f,%.4f", child.Color.R, child.Color.G, child.Color.B) .. ']' end)
+							pcall(function() j = j .. ',"Brightness":' .. tostring(child.Brightness) end)
+							pcall(function() j = j .. ',"Range":' .. tostring(child.Range) end)
+							pcall(function() j = j .. ',"Angle":' .. tostring(child.Angle) end)
+							pcall(function() j = j .. ',"Shadows":' .. tostring(child.Shadows) end)
+							pcall(function() j = j .. ',"Face":"' .. tostring(child.Face) .. '"' end)
+							ac(j .. '}')
+						elseif child:IsA("Fire") then
+							local j = '{"ClassName":"Fire"'
+							pcall(function() j = j .. ',"Color":[' .. string.format("%.4f,%.4f,%.4f", child.Color.R, child.Color.G, child.Color.B) .. ']' end)
+							pcall(function() if child.SecondaryColor then j = j .. ',"SecondaryColor":[' .. string.format("%.4f,%.4f,%.4f", child.SecondaryColor.R, child.SecondaryColor.G, child.SecondaryColor.B) .. ']' end end)
+							pcall(function() j = j .. ',"Heat":' .. tostring(child.Heat) end)
+							pcall(function() j = j .. ',"Size":' .. tostring(child.Size) end)
+							ac(j .. '}')
+						elseif child:IsA("Smoke") then
+							local j = '{"ClassName":"Smoke"'
+							pcall(function() j = j .. ',"Color":[' .. string.format("%.4f,%.4f,%.4f", child.Color.R, child.Color.G, child.Color.B) .. ']' end)
+							pcall(function() j = j .. ',"Opacity":' .. tostring(child.Opacity) end)
+							pcall(function() j = j .. ',"RiseVelocity":' .. tostring(child.RiseVelocity) end)
+							pcall(function() j = j .. ',"Size":' .. tostring(child.Size) end)
+							ac(j .. '}')
+						elseif child:IsA("Sparkles") then
+							ac('{"ClassName":"Sparkles","SparkleColor":[' .. string.format("%.4f,%.4f,%.4f", child.SparkleColor.R, child.SparkleColor.G, child.SparkleColor.B) .. ']}') end
 					end
 					pp(']'); pp('}')
 					return table.concat(pb)
@@ -2055,8 +2100,10 @@ exportBuildToJSON = function(buildParts)
 					pp(',"Children":['); local childCount = 0
 					local function ac(s) if childCount > 0 then pp(",") end; childCount = childCount + 1; pcall(function() pp(s) end) end
 					for _, child in ipairs(part:GetChildren()) do
-						if child:IsA("Decal") or child:IsA("Texture") then
-							ac('{"ClassName":"' .. child.ClassName .. '","Texture":"' .. child.Texture:gsub('"', '\\"') .. '","Face":"' .. tostring(child.Face) .. '","Transparency":' .. string.format("%.4f", child.Transparency) .. '}')
+						if child:IsA("Decal") then
+							ac('{"ClassName":"Decal","Texture":"' .. child.Texture:gsub('"', '\\"') .. '","Face":"' .. tostring(child.Face) .. '","Transparency":' .. string.format("%.4f", child.Transparency) .. '}')
+						elseif child:IsA("Texture") then
+							ac('{"ClassName":"Texture","Texture":"' .. child.Texture:gsub('"', '\\"') .. '","Face":"' .. tostring(child.Face) .. '","Transparency":' .. string.format("%.4f", child.Transparency) .. ',"StudsPerTileU":' .. string.format("%.4f", child.StudsPerTileU) .. ',"StudsPerTileV":' .. string.format("%.4f", child.StudsPerTileV) .. '}')
 						elseif child:IsA("SpecialMesh") then
 							local j = '{"ClassName":"SpecialMesh"'
 							local mt; pcall(function() mt = tostring(child.MeshType):gsub("Enum%.MeshType%.", "") end)
@@ -2068,6 +2115,8 @@ exportBuildToJSON = function(buildParts)
 							local sx, sy, sz = 1, 1, 1; pcall(function() sx, sy, sz = child.Scale.X, child.Scale.Y, child.Scale.Z end)
 							local ox, oy, oz = 0, 0, 0; pcall(function() ox, oy, oz = child.Offset.X, child.Offset.Y, child.Offset.Z end)
 							j = j .. ',"Scale":[' .. string.format("%.4f,%.4f,%.4f", sx, sy, sz) .. '],"Offset":[' .. string.format("%.4f,%.4f,%.4f", ox, oy, oz) .. ']'
+							local vc; pcall(function() vc = child.VertexColor end)
+							if vc and vc.X > 0 and vc.Y > 0 and vc.Z > 0 and (vc.X ~= 1 or vc.Y ~= 1 or vc.Z ~= 1) then j = j .. ',"VertexColor":[' .. string.format("%.4f,%.4f,%.4f", vc.X, vc.Y, vc.Z) .. ']' end
 							ac(j .. '}')
 						elseif child:IsA("BlockMesh") then
 							local j = '{"ClassName":"BlockMesh"'
@@ -2080,7 +2129,48 @@ exportBuildToJSON = function(buildParts)
 							local sx, sy, sz = 1, 1, 1; pcall(function() sx, sy, sz = child.Scale.X, child.Scale.Y, child.Scale.Z end)
 							local ox, oy, oz = 0, 0, 0; pcall(function() ox, oy, oz = child.Offset.X, child.Offset.Y, child.Offset.Z end)
 							j = j .. ',"Scale":[' .. string.format("%.4f,%.4f,%.4f", sx, sy, sz) .. '],"Offset":[' .. string.format("%.4f,%.4f,%.4f", ox, oy, oz) .. ']'
-							ac(j .. '}') end
+							ac(j .. '}')
+						elseif child:IsA("SpotLight") then
+							local j = '{"ClassName":"SpotLight"'
+							pcall(function() j = j .. ',"Color":[' .. string.format("%.4f,%.4f,%.4f", child.Color.R, child.Color.G, child.Color.B) .. ']' end)
+							pcall(function() j = j .. ',"Brightness":' .. tostring(child.Brightness) end)
+							pcall(function() j = j .. ',"Range":' .. tostring(child.Range) end)
+							pcall(function() j = j .. ',"Angle":' .. tostring(child.Angle) end)
+							pcall(function() j = j .. ',"Shadows":' .. tostring(child.Shadows) end)
+							pcall(function() j = j .. ',"Face":"' .. tostring(child.Face) .. '"' end)
+							ac(j .. '}')
+						elseif child:IsA("PointLight") then
+							local j = '{"ClassName":"PointLight"'
+							pcall(function() j = j .. ',"Color":[' .. string.format("%.4f,%.4f,%.4f", child.Color.R, child.Color.G, child.Color.B) .. ']' end)
+							pcall(function() j = j .. ',"Brightness":' .. tostring(child.Brightness) end)
+							pcall(function() j = j .. ',"Range":' .. tostring(child.Range) end)
+							pcall(function() j = j .. ',"Shadows":' .. tostring(child.Shadows) end)
+							ac(j .. '}')
+						elseif child:IsA("SurfaceLight") then
+							local j = '{"ClassName":"SurfaceLight"'
+							pcall(function() j = j .. ',"Color":[' .. string.format("%.4f,%.4f,%.4f", child.Color.R, child.Color.G, child.Color.B) .. ']' end)
+							pcall(function() j = j .. ',"Brightness":' .. tostring(child.Brightness) end)
+							pcall(function() j = j .. ',"Range":' .. tostring(child.Range) end)
+							pcall(function() j = j .. ',"Angle":' .. tostring(child.Angle) end)
+							pcall(function() j = j .. ',"Shadows":' .. tostring(child.Shadows) end)
+							pcall(function() j = j .. ',"Face":"' .. tostring(child.Face) .. '"' end)
+							ac(j .. '}')
+						elseif child:IsA("Fire") then
+							local j = '{"ClassName":"Fire"'
+							pcall(function() j = j .. ',"Color":[' .. string.format("%.4f,%.4f,%.4f", child.Color.R, child.Color.G, child.Color.B) .. ']' end)
+							pcall(function() if child.SecondaryColor then j = j .. ',"SecondaryColor":[' .. string.format("%.4f,%.4f,%.4f", child.SecondaryColor.R, child.SecondaryColor.G, child.SecondaryColor.B) .. ']' end end)
+							pcall(function() j = j .. ',"Heat":' .. tostring(child.Heat) end)
+							pcall(function() j = j .. ',"Size":' .. tostring(child.Size) end)
+							ac(j .. '}')
+						elseif child:IsA("Smoke") then
+							local j = '{"ClassName":"Smoke"'
+							pcall(function() j = j .. ',"Color":[' .. string.format("%.4f,%.4f,%.4f", child.Color.R, child.Color.G, child.Color.B) .. ']' end)
+							pcall(function() j = j .. ',"Opacity":' .. tostring(child.Opacity) end)
+							pcall(function() j = j .. ',"RiseVelocity":' .. tostring(child.RiseVelocity) end)
+							pcall(function() j = j .. ',"Size":' .. tostring(child.Size) end)
+							ac(j .. '}')
+						elseif child:IsA("Sparkles") then
+							ac('{"ClassName":"Sparkles","SparkleColor":[' .. string.format("%.4f,%.4f,%.4f", child.SparkleColor.R, child.SparkleColor.G, child.SparkleColor.B) .. ']}') end
 					end
 					pp(']'); pp('}')
 					return table.concat(pb)
@@ -2100,6 +2190,58 @@ exportBuildToJSON = function(buildParts)
 	progressFrame.Visible = false; exportInProgress = false
 	if ok then notify("Exported " .. total .. " parts to " .. filename); statusLabel.Text = "Saved: " .. filename
 	else notify("Export failed: " .. tostring(err):sub(1, 60)) end
+end
+
+local function luaPartString(part)
+	local buf = {}; local bi = 0
+	local function ap(s) bi = bi + 1; buf[bi] = s end
+	ap(string.format("{ClassName=%q,Name=%q,CFrame=%s,Size=%s,Color=%s,Material=%q,Anchored=%s,Transparency=%s,Reflectance=%s,CanCollide=%s,CastShadow=%s,Locked=%s", part.ClassName, part.Name, fmtCF(part.CFrame), fmtV3(part.Size), fmtC3(part.Color), tostring(part.Material), fmtVal(part.Anchored), fmtVal(part.Transparency), fmtVal(part.Reflectance), fmtVal(part.CanCollide), fmtVal(part.CastShadow), fmtVal(part.Locked)))
+	if part:IsA("Part") then local shape; pcall(function() shape = part.Shape end); if shape then ap(string.format(",Shape=%q", tostring(shape))) end end
+	if part:IsA("MeshPart") then
+		if part.MeshId and part.MeshId ~= "" then ap(string.format(",MeshId=%q", part.MeshId)) end
+		if part.TextureID and part.TextureID ~= "" then ap(string.format(",TextureID=%q", part.TextureID)) end
+		ap(string.format(",RenderFidelity=%q,CollisionFidelity=%q", tostring(part.RenderFidelity), tostring(part.CollisionFidelity)))
+	end
+	local children = part:GetChildren()
+	if #children > 0 then
+		ap(",Children={")
+		for ci, child in ipairs(children) do
+			if ci > 1 then ap(",") end
+			if child:IsA("Decal") then
+				ap(string.format("{ClassName=%q,Texture=%q,Face=%q,Transparency=%s}", "Decal", child.Texture, tostring(child.Face), fmtVal(child.Transparency)))
+			elseif child:IsA("Texture") then
+				ap(string.format("{ClassName=%q,Texture=%q,Face=%q,Transparency=%s,StudsPerTileU=%s,StudsPerTileV=%s}", "Texture", child.Texture, tostring(child.Face), fmtVal(child.Transparency), fmtVal(child.StudsPerTileU), fmtVal(child.StudsPerTileV)))
+			elseif child:IsA("SpecialMesh") then
+				local s = string.format("{ClassName=%q,MeshType=%q,Scale=%s,Offset=%s", "SpecialMesh", tostring(child.MeshType):gsub("Enum%.MeshType%.", ""), fmtV3(child.Scale), fmtV3(child.Offset))
+				if child.MeshId ~= "" then s = s .. string.format(",MeshId=%q", child.MeshId) end
+				if child.TextureId ~= "" then s = s .. string.format(",TextureId=%q", child.TextureId) end
+				local vc; pcall(function() vc = child.VertexColor end)
+				if vc and vc.X > 0 and vc.Y > 0 and vc.Z > 0 and (vc.X ~= 1 or vc.Y ~= 1 or vc.Z ~= 1) then s = s .. string.format(",VertexColor=%s", fmtV3(vc)) end
+				ap(s .. "}")
+			elseif child:IsA("BlockMesh") then
+				ap(string.format("{ClassName=%q,Scale=%s,Offset=%s}", "BlockMesh", fmtV3(child.Scale), fmtV3(child.Offset)))
+			elseif child:IsA("CylinderMesh") then
+				ap(string.format("{ClassName=%q,Scale=%s,Offset=%s}", "CylinderMesh", fmtV3(child.Scale), fmtV3(child.Offset)))
+			elseif child:IsA("SpotLight") then
+				ap(string.format("{ClassName=%q,Color=%s,Brightness=%s,Range=%s,Angle=%s,Shadows=%s,Face=%q}", "SpotLight", fmtC3(child.Color), fmtVal(child.Brightness), fmtVal(child.Range), fmtVal(child.Angle), fmtVal(child.Shadows), tostring(child.Face)))
+			elseif child:IsA("PointLight") then
+				ap(string.format("{ClassName=%q,Color=%s,Brightness=%s,Range=%s,Shadows=%s}", "PointLight", fmtC3(child.Color), fmtVal(child.Brightness), fmtVal(child.Range), fmtVal(child.Shadows)))
+			elseif child:IsA("SurfaceLight") then
+				ap(string.format("{ClassName=%q,Color=%s,Brightness=%s,Range=%s,Angle=%s,Shadows=%s,Face=%q}", "SurfaceLight", fmtC3(child.Color), fmtVal(child.Brightness), fmtVal(child.Range), fmtVal(child.Angle), fmtVal(child.Shadows), tostring(child.Face)))
+			elseif child:IsA("Fire") then
+				local s = string.format("{ClassName=%q,Color=%s,Heat=%s,Size=%s", "Fire", fmtC3(child.Color), fmtVal(child.Heat), fmtVal(child.Size))
+				local sc; pcall(function() sc = child.SecondaryColor end)
+				if sc then s = s .. string.format(",SecondaryColor=%s", fmtC3(sc)) end
+				ap(s .. "}")
+			elseif child:IsA("Smoke") then
+				ap(string.format("{ClassName=%q,Color=%s,Opacity=%s,RiseVelocity=%s,Size=%s}", "Smoke", fmtC3(child.Color), fmtVal(child.Opacity), fmtVal(child.RiseVelocity), fmtVal(child.Size)))
+			elseif child:IsA("Sparkles") then
+				ap(string.format("{ClassName=%q,SparkleColor=%s}", "Sparkles", fmtC3(child.SparkleColor))) end
+		end
+		ap("}")
+	end
+	ap("}")
+	return table.concat(buf)
 end
 
 exportBuildToLua = function(buildParts)
@@ -2127,7 +2269,7 @@ exportBuildToLua = function(buildParts)
 			push("-- F3X Build Export\nlocal buildData = {\n  Name = " .. string.format("%q", selectedBuildName or "Export") .. ",\n  PartCount = " .. tostring(#buildParts) .. ",\n  Parts = {\n")
 			for i, part in ipairs(buildParts) do
 				if part and part:IsA("BasePart") then
-					local pd = string.format("    {ClassName=%q,Size=%s,Position=%s,Rotation=%s,Color=%s,Material=%q,Anchored=%s,Transparency=%s,Reflectance=%s}", part.ClassName, fmtV3(part.Size), fmtV3(part.Position), fmtV3(Vector3.new(part.Orientation.X, part.Orientation.Y, part.Orientation.Z)), fmtC3(part.Color), tostring(part.Material), fmtVal(part.Anchored), fmtVal(part.Transparency), fmtVal(part.Reflectance))
+					local pd = "    " .. luaPartString(part)
 					if i > 1 then push(",\n") end; push(pd)
 				end
 			end
@@ -2140,7 +2282,7 @@ exportBuildToLua = function(buildParts)
 			add("-- F3X Build Export\nlocal buildData = {\n  Name = " .. string.format("%q", selectedBuildName or "Export") .. ",\n  PartCount = " .. tostring(#buildParts) .. ",\n  Parts = {\n")
 			for i, part in ipairs(buildParts) do
 				if part and part:IsA("BasePart") then
-					local pd = string.format("    {ClassName=%q,Size=%s,Position=%s,Rotation=%s,Color=%s,Material=%q,Anchored=%s,Transparency=%s,Reflectance=%s}", part.ClassName, fmtV3(part.Size), fmtV3(part.Position), fmtV3(Vector3.new(part.Orientation.X, part.Orientation.Y, part.Orientation.Z)), fmtC3(part.Color), tostring(part.Material), fmtVal(part.Anchored), fmtVal(part.Transparency), fmtVal(part.Reflectance))
+					local pd = "    " .. luaPartString(part)
 					if i > 1 then add(",\n") end; add(pd)
 				end
 			end
