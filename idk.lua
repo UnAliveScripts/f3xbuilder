@@ -7,6 +7,7 @@
 ]]
 
 -- ==================== 1. SERVICES & CONSTANTS ====================
+print("F3X Unified Build System v4.0 loaded - MCP connected!")
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local TweenService = game:GetService("TweenService")
@@ -397,6 +398,20 @@ local function parseLightType(str)
 	elseif name:find("Point") then return "PointLight"
 	elseif name:find("Spot") then return "SpotLight" end
 	return "PointLight"
+end
+
+local function parseRenderFidelity(str)
+	if not str then return Enum.RenderFidelity.Automatic end
+	local name = str:match("Enum%.RenderFidelity%.(.+)") or str
+	for _, enum in ipairs(Enum.RenderFidelity:GetEnumItems()) do if enum.Name == name then return enum end end
+	return Enum.RenderFidelity.Automatic
+end
+
+local function parseCollisionFidelity(str)
+	if not str then return Enum.CollisionFidelity.Default end
+	local name = str:match("Enum%.CollisionFidelity%.(.+)") or str
+	for _, enum in ipairs(Enum.CollisionFidelity:GetEnumItems()) do if enum.Name == name then return enum end end
+	return Enum.CollisionFidelity.Default
 end
 
 local function parseDecoType(str)
@@ -1277,11 +1292,31 @@ end)
 
 -- ==================== 10. PROPERTY APPLIER ====================
 local pendingMeshes = {} -- {Part = part, Data = meshData}
+local pendingLights = {} -- {Part = part, Data = lightData}
+local pendingDecorations = {} -- {Part = part, Data = decoData}
+local pendingTextures = {} -- {Part = part, Data = texData}
+local pendingWelds = {} -- {Part0 = p0, Part1 = p1}
 
 local function applyF3XMesh(part, meshData)
 	if not part or not part:FindFirstAncestorOfClass("DataModel") then return false end
 	table.insert(pendingMeshes, {Part = part, Data = meshData})
 	return true
+end
+
+local function applyF3XLight(part, lightData)
+	table.insert(pendingLights, {Part = part, Data = lightData})
+end
+
+local function applyF3XDecoration(part, decoData)
+	table.insert(pendingDecorations, {Part = part, Data = decoData})
+end
+
+local function applyF3XTexture(part, texData)
+	table.insert(pendingTextures, {Part = part, Data = texData})
+end
+
+local function applyF3XWeld(p0, p1)
+	table.insert(pendingWelds, {Part0 = p0, Part1 = p1})
 end
 
 local function applyPendingMeshes()
@@ -1318,6 +1353,101 @@ local function applyPendingMeshes()
 	end
 	pendingMeshes = {}
 	return applied, failed
+end
+
+local function applyPendingLights()
+	if #pendingLights == 0 then return 0, 0 end
+	local applied, failed = 0, 0
+	-- Pass 1: Batch create light containers
+	local createArgs = {}
+	for _, entry in ipairs(pendingLights) do
+		local part, ld = entry.Part, entry.Data
+		table.insert(createArgs, {Part = part, LightType = ld.LightType})
+		if #createArgs >= 20 then
+			pcall(function() F3XRetry("CreateLights", createArgs) end)
+			createArgs = {}
+		end
+	end
+	if #createArgs > 0 then pcall(function() F3XRetry("CreateLights", createArgs) end) end
+	task.wait(0.3)
+	-- Pass 2: Sync light properties
+	local syncArgs = {}
+	for _, entry in ipairs(pendingLights) do
+		table.insert(syncArgs, entry.Data)
+		if #syncArgs >= 20 then
+			pcall(function() F3XRetry("SyncLighting", syncArgs) end)
+			syncArgs = {}
+		end
+	end
+	if #syncArgs > 0 then pcall(function() F3XRetry("SyncLighting", syncArgs) end) end
+	applied = #pendingLights; pendingLights = {}
+	return applied, failed
+end
+
+local function applyPendingDecorations()
+	if #pendingDecorations == 0 then return 0, 0 end
+	local applied, failed = 0, 0
+	local createArgs = {}
+	for _, entry in ipairs(pendingDecorations) do
+		local part, dd = entry.Part, entry.Data
+		table.insert(createArgs, {Part = part, DecorationType = dd.DecorationType})
+		if #createArgs >= 20 then
+			pcall(function() F3XRetry("CreateDecorations", createArgs) end)
+			createArgs = {}
+		end
+	end
+	if #createArgs > 0 then pcall(function() F3XRetry("CreateDecorations", createArgs) end) end
+	task.wait(0.3)
+	local syncArgs = {}
+	for _, entry in ipairs(pendingDecorations) do
+		table.insert(syncArgs, entry.Data)
+		if #syncArgs >= 20 then
+			pcall(function() F3XRetry("SyncDecorate", syncArgs) end)
+			syncArgs = {}
+		end
+	end
+	if #syncArgs > 0 then pcall(function() F3XRetry("SyncDecorate", syncArgs) end) end
+	applied = #pendingDecorations; pendingDecorations = {}
+	return applied, failed
+end
+
+local function applyPendingTextures()
+	if #pendingTextures == 0 then return 0, 0 end
+	local applied, failed = 0, 0
+	local createArgs = {}
+	for _, entry in ipairs(pendingTextures) do
+		local part, td = entry.Part, entry.Data
+		table.insert(createArgs, {Part = part, Face = td.Face, TextureType = td.TextureType or "Decal"})
+		if #createArgs >= 20 then
+			pcall(function() F3XRetry("CreateTextures", createArgs) end)
+			createArgs = {}
+		end
+	end
+	if #createArgs > 0 then pcall(function() F3XRetry("CreateTextures", createArgs) end) end
+	task.wait(0.3)
+	local syncArgs = {}
+	for _, entry in ipairs(pendingTextures) do
+		table.insert(syncArgs, entry.Data)
+		if #syncArgs >= 20 then
+			pcall(function() F3XRetry("SyncTexture", syncArgs) end)
+			syncArgs = {}
+		end
+	end
+	if #syncArgs > 0 then pcall(function() F3XRetry("SyncTexture", syncArgs) end) end
+	applied = #pendingTextures; pendingTextures = {}
+	return applied, failed
+end
+
+local function applyPendingWelds()
+	if #pendingWelds == 0 then return 0, 0 end
+	for _, entry in ipairs(pendingWelds) do
+		local p0, p1 = entry.Part0, entry.Part1
+		if p0 and p1 and p0:FindFirstAncestorOfClass("DataModel") and p1:FindFirstAncestorOfClass("DataModel") then
+			pcall(function() F3XRetry("CreateWelds", {p0}, p1) end)
+		end
+	end
+	local count = #pendingWelds; pendingWelds = {}
+	return count, 0
 end
 local function applyPartProperties(part, partData, cf, partMap)
 	local resizeChanges = {}; local colorChanges = {}; local materialChanges = {}
@@ -1381,9 +1511,18 @@ local function applyPartProperties(part, partData, cf, partMap)
 	local className = partData.ClassName or "Part"
 	if className == "MeshPart" then
 		-- F3X can only create Parts, so create a SpecialMesh(FileMesh) child
+		-- Compute mesh scale from part Size to preserve original proportions
 		if partData.MeshId and isValidAssetUrl(partData.MeshId) then
-			applyF3XMesh(part, {MeshType = Enum.MeshType.FileMesh, MeshId = partData.MeshId, TextureId = partData.TextureID or "", Scale = Vector3.new(1, 1, 1), Offset = Vector3.new(0, 0, 0)})
+			local pSize = partData.Size and parseVector3(partData.Size) * CONFIG.BuildScale or part.Size
+			local refScale = 4
+			local maxDim = math.max(pSize.X, pSize.Y, pSize.Z, 0.1)
+			local baseScale = maxDim / refScale
+			local meshScale = Vector3.new(baseScale, baseScale, baseScale)
+			applyF3XMesh(part, {MeshType = Enum.MeshType.FileMesh, MeshId = partData.MeshId, TextureId = partData.TextureID or "", Scale = meshScale, Offset = Vector3.new(0, 0, 0)})
 		end
+		-- Apply MeshPart-specific properties
+		if partData.RenderFidelity then pcall(function() part.RenderFidelity = parseRenderFidelity(partData.RenderFidelity) end) end
+		if partData.CollisionFidelity then pcall(function() part.CollisionFidelity = parseCollisionFidelity(partData.CollisionFidelity) end) end
 	end
 
 	if partData.Children then
@@ -1419,15 +1558,17 @@ local function applyPartProperties(part, partData, cf, partMap)
 			pcall(function()
 				if cd.ClassName == "Decal" or cd.ClassName == "Texture" then
 					if not cd.Texture or not isValidAssetUrl(cd.Texture) then return end
-					F3XRetry("CreateTextures", {{Part = part, Face = parseNormalId(cd.Face), TextureType = "Decal"}})
-					local tc = {Part = part, Face = parseNormalId(cd.Face), TextureType = "Decal"}
+					local face = parseNormalId(cd.Face)
+					local isDecal = cd.ClassName == "Decal"
+					local tc = {Part = part, Face = face, TextureType = isDecal and "Decal" or "Texture"}
 					tc.Texture = cd.Texture
 					if cd.Transparency ~= nil then tc.Transparency = cd.Transparency end
-					if cd.StudsPerTileU ~= nil then tc.StudsPerTileU = cd.StudsPerTileU end
-					if cd.StudsPerTileV ~= nil then tc.StudsPerTileV = cd.StudsPerTileV end
-					F3XRetry("SyncTexture", {tc})
+					if not isDecal then
+						if cd.StudsPerTileU ~= nil then tc.StudsPerTileU = cd.StudsPerTileU end
+						if cd.StudsPerTileV ~= nil then tc.StudsPerTileV = cd.StudsPerTileV end
+					end
+					applyF3XTexture(part, tc)
 				elseif cd.ClassName == "SurfaceLight" or cd.ClassName == "PointLight" or cd.ClassName == "SpotLight" then
-					F3XRetry("CreateLights", {{Part = part, LightType = cd.ClassName}})
 					local lc = {Part = part, LightType = cd.ClassName}
 					if cd.Color then lc.Color = parseColor3(cd.Color) end
 					if cd.Brightness ~= nil then lc.Brightness = cd.Brightness end
@@ -1435,9 +1576,8 @@ local function applyPartProperties(part, partData, cf, partMap)
 					if cd.Shadows ~= nil then lc.Shadows = cd.Shadows end
 					if cd.Face then lc.Face = parseNormalId(cd.Face) end
 					if cd.Angle ~= nil then lc.Angle = cd.Angle end
-					F3XRetry("SyncLighting", {lc})
+					applyF3XLight(part, lc)
 				elseif cd.ClassName == "Smoke" or cd.ClassName == "Fire" or cd.ClassName == "Sparkles" then
-					F3XRetry("CreateDecorations", {{Part = part, DecorationType = cd.ClassName}})
 					local dc = {Part = part, DecorationType = cd.ClassName}
 					if cd.Color then dc.Color = parseColor3(cd.Color) end
 					if cd.Size ~= nil then dc.Size = cd.Size end
@@ -1447,11 +1587,11 @@ local function applyPartProperties(part, partData, cf, partMap)
 					if cd.Heat ~= nil then dc.Heat = cd.Heat end
 					if cd.SecondaryColor then dc.SecondaryColor = parseColor3(cd.SecondaryColor) end
 					if cd.SparkleColor then dc.SparkleColor = parseColor3(cd.SparkleColor) end
-					F3XRetry("SyncDecorate", {dc})
+					applyF3XDecoration(part, dc)
 				elseif cd.ClassName == "Weld" or cd.ClassName == "WeldConstraint" then
 					if cd.Part0Index and cd.Part1Index and partMap then
 						local p0 = partMap[cd.Part0Index]; local p1 = partMap[cd.Part1Index]
-						if p0 and p1 then pcall(function() F3XRetry("CreateWelds", {p0}, p1) end) end
+						if p0 and p1 then applyF3XWeld(p0, p1) end
 					end
 				end
 			end)
@@ -1551,6 +1691,22 @@ local function hyperBuild(parts, total, partMap)
 	end
 	local threads = {}; for t = 1, threadCount do threads[t] = task.spawn(function() buildChunk(chunks[t]) end) end
 	for t = 1, threadCount do while coroutine.status(threads[t]) ~= "dead" do task.wait(0.1) end end
+	-- Weld retry pass: re-apply any welds that failed due to cross-thread race conditions
+	local weldRetries = 0
+	for i, partData in ipairs(parts) do
+		if partData.Children then
+			for _, cd in ipairs(partData.Children) do
+				if (cd.ClassName == "Weld" or cd.ClassName == "WeldConstraint") and cd.Part0Index and cd.Part1Index then
+					local p0 = partMap[cd.Part0Index]; local p1 = partMap[cd.Part1Index]
+					if p0 and p1 then
+						local wSuccess = pcall(function() applyF3XWeld(p0, p1) end)
+						if wSuccess then weldRetries = weldRetries + 1 end
+					end
+				end
+			end
+		end
+	end
+	if weldRetries > 0 and CONFIG.Debug then print("Weld retry pass: re-welded", weldRetries, "connections") end
 	return failedCount
 end
 
@@ -2040,7 +2196,11 @@ exportBuildToJSON = function(buildParts)
 							pcall(function() j = j .. ',"Size":' .. tostring(child.Size) end)
 							ac(j .. '}')
 						elseif child:IsA("Sparkles") then
-							ac('{"ClassName":"Sparkles","SparkleColor":[' .. string.format("%.4f,%.4f,%.4f", child.SparkleColor.R, child.SparkleColor.G, child.SparkleColor.B) .. ']}') end
+							local j = '{"ClassName":"Sparkles"'
+							pcall(function() j = j .. ',"Color":[' .. string.format("%.4f,%.4f,%.4f", child.Color.R, child.Color.G, child.Color.B) .. ']' end)
+							pcall(function() j = j .. ',"SparkleColor":[' .. string.format("%.4f,%.4f,%.4f", child.SparkleColor.R, child.SparkleColor.G, child.SparkleColor.B) .. ']' end)
+							pcall(function() j = j .. ',"Brightness":' .. tostring(child.Brightness) end)
+							ac(j .. '}') end
 					end
 					pp(']'); pp('}')
 					return table.concat(pb)
@@ -2170,7 +2330,11 @@ exportBuildToJSON = function(buildParts)
 							pcall(function() j = j .. ',"Size":' .. tostring(child.Size) end)
 							ac(j .. '}')
 						elseif child:IsA("Sparkles") then
-							ac('{"ClassName":"Sparkles","SparkleColor":[' .. string.format("%.4f,%.4f,%.4f", child.SparkleColor.R, child.SparkleColor.G, child.SparkleColor.B) .. ']}') end
+							local j = '{"ClassName":"Sparkles"'
+							pcall(function() j = j .. ',"Color":[' .. string.format("%.4f,%.4f,%.4f", child.Color.R, child.Color.G, child.Color.B) .. ']' end)
+							pcall(function() j = j .. ',"SparkleColor":[' .. string.format("%.4f,%.4f,%.4f", child.SparkleColor.R, child.SparkleColor.G, child.SparkleColor.B) .. ']' end)
+							pcall(function() j = j .. ',"Brightness":' .. tostring(child.Brightness) end)
+							ac(j .. '}') end
 					end
 					pp(']'); pp('}')
 					return table.concat(pb)
@@ -2236,7 +2400,14 @@ local function luaPartString(part)
 			elseif child:IsA("Smoke") then
 				ap(string.format("{ClassName=%q,Color=%s,Opacity=%s,RiseVelocity=%s,Size=%s}", "Smoke", fmtC3(child.Color), fmtVal(child.Opacity), fmtVal(child.RiseVelocity), fmtVal(child.Size)))
 			elseif child:IsA("Sparkles") then
-				ap(string.format("{ClassName=%q,SparkleColor=%s}", "Sparkles", fmtC3(child.SparkleColor))) end
+				local sc, sb, ssc
+				pcall(function() sc = child.Color end); pcall(function() sb = child.Brightness end)
+				ssc = child.SparkleColor
+				local parts = {"{ClassName=%q", "Sparkles"}
+				if ssc then table.insert(parts, string.format("SparkleColor=%s", fmtC3(ssc))) end
+				if sc then table.insert(parts, string.format("Color=%s", fmtC3(sc))) end
+				if sb then table.insert(parts, string.format("Brightness=%s", fmtVal(sb))) end
+				ap(table.concat(parts, ",") .. "}") end
 		end
 		ap("}")
 	end
@@ -2392,6 +2563,18 @@ local function processQueue()
 		end
 		local meshApplied, meshFailed = applyPendingMeshes()
 		failedCount = failedCount + meshFailed
+		task.wait(0.2)
+		local lightApplied, lightFailed = applyPendingLights()
+		failedCount = failedCount + lightFailed
+		task.wait(0.2)
+		local decoApplied, decoFailed = applyPendingDecorations()
+		failedCount = failedCount + decoFailed
+		task.wait(0.2)
+		local texApplied, texFailed = applyPendingTextures()
+		failedCount = failedCount + texFailed
+		task.wait(0.2)
+		local weldApplied, weldFailed = applyPendingWelds()
+		failedCount = failedCount + weldFailed
 		local buildTime = tick() - buildStart; progressFrame.Visible = false
 		notify(string.format("Build complete! %d/%d parts (%d failed) in %.2fs", total - failedCount, total, failedCount, buildTime))
 		statusLabel.Text = string.format("Done: %d/%d (%d failed, %.2fs)", total - failedCount, total, failedCount, buildTime)
@@ -2636,5 +2819,21 @@ else
 	notify("Failed to connect to F3X   some features may not work")
 	statusLabel.Text = "?? F3X not connected"
 end
+	getgenv().unifiedF3X = {
+		buildCurrentNow = buildCurrentNow,
+		exportBuildToJSON = exportBuildToJSON,
+		exportBuildToLua = exportBuildToLua,
+		normalBuild = normalBuild,
+		hyperBuild = hyperBuild,
+		applyPartProperties = applyPartProperties,
+		buildQueue = buildQueue,
+		processQueue = processQueue,
+		clearGhost = clearGhost,
+		isBuilding = isBuilding,
+		resetState = function() isBuilding = false; buildQueue = {} end,
+		selectedBuildData = selectedBuildData,
+		selectedBuildName = selectedBuildName,
+		CONFIG = CONFIG
+	}
 end
 initUI()
